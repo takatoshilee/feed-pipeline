@@ -1,0 +1,14 @@
+# Each entry: slug + ats (greenhouse|lever|ashby) + tier (dream|target)
+# Verify a slug by opening its board:
+#   greenhouse -> https://boards.greenhouse.io/<slug>
+#   lever      -> https://jobs.lever.co/<slug>
+#   ashby      -> https://jobs.ashbyhq.com/<slug>
+# Wrong slugs simply 404 and are skipped, so this is safe to grow freely.
+companies:
+  - {slug: wealthsimple, ats: lever, tier: dream}
+  - {slug: notion, ats: ashby, tier: dream}
+  - {slug: ramp, ats: ashby, tier: target}
+  - {slug: cohere, ats: ashby, tier: dream}
+  - {slug: openai, ats: ashby, tier: dream}
+  - {slug: databricks, ats: greenhouse, tier: target}
+  - {slug: stripe, ats: greenhouse, tier: target}

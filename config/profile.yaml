@@ -1,0 +1,67 @@
+summary: >
+  Second-year Computer Science student at the University of Toronto (co-op stream),
+  graduating December 2028. Seeking software engineering, AI/ML, and data internships
+  and 12-16 month co-op terms (Summer 2026, 2027). Strong in Python, TypeScript/React,
+  full-stack web, and LLM application development; some applied ML. Based in Toronto;
+  open to remote within Canada and North America. Penalize senior/staff/manager roles
+  and anything requiring 3+ years of experience or security clearance.
+
+title_include:
+  - intern
+  - internship
+  - co-op
+  - "co op"
+  - coop
+  - "new grad"
+  - "new-grad"
+  - "early career"
+  - student
+  - software
+  - swe
+  - "machine learning"
+  - " ml "
+  - " ai "
+  - data
+  - backend
+  - "full stack"
+  - "full-stack"
+  - developer
+  - engineer
+
+title_exclude:
+  - senior
+  - "sr."
+  - staff
+  - principal
+  - lead
+  - manager
+  - director
+  - "vp "
+  - "head of"
+  - " ii"
+  - " iii"
+  - " iv"
+  - architect
+  - "5+ years"
+  - "6+ years"
+  - "7+ years"
+  - "8+ years"
+  - clearance
+  - phd
+  - postdoc
+
+locations_allow:
+  - toronto
+  - ontario
+  - canada
+  - canadian
+  - remote
+  - "north america"
+
+locations_block: []
+
+freshness_days: 21
+ping_threshold: 65
+digest_threshold: 50
+high_score: 80
+high_fresh_hours: 2

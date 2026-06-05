@@ -1,0 +1,23 @@
+{
+  "jobs": [
+    {
+      "id": "job_1",
+      "title": "ML Engineering Intern",
+      "location": "Remote, Canada",
+      "employmentType": "Intern",
+      "jobUrl": "https://jobs.ashbyhq.com/cohere/job_1",
+      "publishedAt": "2026-06-01T10:00:00Z",
+      "descriptionPlain": "Work on models.",
+      "isListed": true
+    },
+    {
+      "id": "job_2",
+      "title": "Unlisted Role",
+      "location": "SF",
+      "jobUrl": "https://jobs.ashbyhq.com/cohere/job_2",
+      "publishedAt": "2026-06-01T10:00:00Z",
+      "descriptionPlain": "hidden",
+      "isListed": false
+    }
+  ]
+}
