@@ -1,0 +1,10 @@
+[
+  {
+    "id": "abc-123",
+    "text": "Software Developer Intern",
+    "categories": {"location": "Toronto", "commitment": "Internship", "team": "Eng"},
+    "hostedUrl": "https://jobs.lever.co/wealthsimple/abc-123",
+    "createdAt": 1780000000000,
+    "descriptionPlain": "Join our team."
+  }
+]

@@ -1,0 +1,41 @@
+name: job-radar
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # every 15 min (best-effort; GH may delay under load)
+  workflow_dispatch: {}        # manual run button
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radar
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Restore the seen-set from the most recent prior run. The key is unique per
+      # run so a fresh cache is always saved at job end; restore-keys grabs the latest.
+      - name: Restore seen-set
+        uses: actions/cache@v4
+        with:
+          path: .state
+          key: seen-${{ github.run_id }}
+          restore-keys: |
+            seen-
+
+      - run: pip install -e .
+
+      - name: Run radar
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          DISCORD_ROLE_ID: ${{ secrets.DISCORD_ROLE_ID }}
+          SEEN_PATH: .state/seen.json
+        run: python -m job_radar
