@@ -1,0 +1,20 @@
+{
+  "jobs": [
+    {
+      "id": 101,
+      "title": "Software Engineer Intern",
+      "location": {"name": "Toronto, Canada"},
+      "absolute_url": "https://boards.greenhouse.io/stripe/jobs/101",
+      "updated_at": "2026-06-01T12:00:00-04:00",
+      "content": "&lt;p&gt;Build &lt;b&gt;things&lt;/b&gt;.&lt;/p&gt;"
+    },
+    {
+      "id": 102,
+      "title": "Senior Staff Engineer",
+      "location": {"name": "New York"},
+      "absolute_url": "https://boards.greenhouse.io/stripe/jobs/102",
+      "updated_at": "2026-05-01T12:00:00-04:00",
+      "content": "&lt;p&gt;Lead.&lt;/p&gt;"
+    }
+  ]
+}
