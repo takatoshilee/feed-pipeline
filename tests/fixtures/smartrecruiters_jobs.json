@@ -1,0 +1,17 @@
+{
+  "totalFound": 2,
+  "content": [
+    {
+      "id": "743999000000001",
+      "name": "Software Engineering Intern",
+      "releasedDate": "2026-06-05T09:00:00.000Z",
+      "location": {"city": "Montreal", "region": "QC", "country": "ca", "remote": false}
+    },
+    {
+      "id": "743999000000002",
+      "name": "Gameplay Programmer",
+      "releasedDate": "2026-06-01T09:00:00.000Z",
+      "location": {"city": null, "region": null, "country": null, "remote": true}
+    }
+  ]
+}
