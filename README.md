@@ -28,6 +28,7 @@ python -m job_radar --dry-run --limit 5        # full pipeline, console output, 
 | `--preview` | Show what would surface from the **current backlog**, ranked by fit. Read-only (no priming, no state writes). Best for tuning `profile.yaml`. |
 | `--dry-run` | Run the full pipeline but print to console instead of posting to Discord. |
 | `--prime` | Mark everything seen without notifying (re-prime; e.g. after broadening the profile). |
+| `--backfill` | One-time: score the current open backlog and write matches to the Sheet (no pings, no state change). Seeds the tracker with today's inventory. Needs the Sheet env vars + an LLM key. |
 | `--company SLUG` | Only poll one company (local testing). |
 | `--limit N` | Only poll the first N companies. |
 | `--profile / --companies / --state PATH` | Override config/state paths. |
@@ -86,6 +87,12 @@ Google setup: enable the Sheets API, create a **service account**, download its 
 key, and share the Sheet with the service-account email (Editor). The Sheet's columns
 are created automatically on first write. Locally you can preview reminders with
 `GOOGLE_SHEET_ID=... GOOGLE_CREDENTIALS_PATH=google-creds.json python -m job_radar.remind`.
+
+The Sheet otherwise fills only as *new* roles appear (everything already seen was
+primed). To seed it with today's open inventory immediately, run `--backfill` once
+(scores the current backlog and writes matches; no pings, no state change). Mind the
+LLM quota: the Gemini free tier is ~200 requests/day shared with the cron, so the
+backfill is capped (raise `BACKFILL_CAP` with a paid key).
 
 ## Optional: always-on interactive bot
 

@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from job_radar.config import Config, Settings
 from job_radar.dedup import SeenStore
 from job_radar.models import Company, Posting, Profile, Score, Urgency
@@ -201,3 +203,60 @@ async def test_sheet_failure_does_not_abort_run(tmp_path, monkeypatch):
     assert stats["errors"] >= 1
     assert len(notifier.ones) == 1   # the Discord ping still fired despite the Sheet error
     assert stats["tracked"] == 0
+
+
+async def test_backfill_writes_to_sheet_without_touching_state(tmp_path, monkeypatch):
+    import os
+
+    async def fake_fetch_all(companies, **kw):
+        return _postings(), []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    config = _config(tmp_path)  # no _prime_seen: backfill ignores the seen-set entirely
+
+    sink = FakeSink()
+    stats = await pipeline.backfill(config, provider=FakeProvider(value=90, reason="r"),
+                                    sheet_sink=sink, now=NOW)
+    assert sink.added == ["greenhouse:c:1"]   # intern only; the senior was rules-filtered
+    assert stats["tracked"] == 1
+    assert not os.path.exists(config.settings.seen_path)  # seen-set never written
+
+
+async def test_backfill_requires_a_sheet(tmp_path, monkeypatch):
+    async def fake_fetch_all(companies, **kw):
+        return _postings(), []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    config = _config(tmp_path)  # settings.sheet_id is None -> no sink can be built
+    with pytest.raises(SystemExit):
+        await pipeline.backfill(config, provider=FakeProvider(value=90))
+
+
+class ErrorProvider:
+    """Mimics an LLM outage / 429: returns a zero score flagged not-ok."""
+    async def score(self, posting, profile):
+        return Score(0, "LLM error: 429", ok=False)
+
+
+async def test_error_score_pings_dream_but_is_not_written_to_sheet(tmp_path, monkeypatch):
+    async def fake_fetch_all(companies, **kw):
+        return _postings(), []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    # Dream tier: classify() routes to HIGH regardless of score, so without the ok-gate
+    # a failed score would land in the Sheet as a bogus Fit 0 row.
+    profile = Profile(summary="s", title_include=["intern"], title_exclude=["senior"],
+                      locations_allow=["toronto"], locations_block=[], freshness_days=21)
+    companies = [Company(slug="c", ats="greenhouse", tier="dream")]
+    settings = Settings(webhook_url=None, llm_api_key=None, llm_model="m", llm_provider="gemini",
+                        role_id=None, seen_path=str(tmp_path / "seen.json"), dry_run=True)
+    config = Config(profile, companies, settings)
+    _prime_seen(config)
+
+    sink = FakeSink()
+    notifier = FakeNotifier()
+    stats = await pipeline.run(config, provider=ErrorProvider(), notifier=notifier,
+                               sheet_sink=sink, now=NOW)
+    assert sink.added == []             # error score never written, even for a dream company
+    assert stats["score_errors"] == 1   # the failure is surfaced in stats, not silent
+    assert len(notifier.ones) == 1      # dream-tier still pings Discord as a heads-up

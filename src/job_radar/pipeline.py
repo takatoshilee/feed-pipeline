@@ -11,7 +11,11 @@ from .sources import enrich_postings, fetch_all
 from .urgency import classify
 
 SCORE_CONCURRENCY = 6
-PREVIEW_CAP = 80   # max survivors to LLM-score in --preview (use --company/--limit to narrow)
+PREVIEW_CAP = 80    # max survivors to LLM-score in --preview (use --company/--limit to narrow)
+# Max survivors to score in --backfill (freshest first), bounding LLM cost. Default
+# stays under the Gemini free tier's ~200 requests/day (shared with the cron); raise
+# via the BACKFILL_CAP env var if you have a paid key.
+BACKFILL_CAP = int(os.environ.get("BACKFILL_CAP", "120"))
 
 
 def _company_map(companies):
@@ -41,7 +45,7 @@ async def _score_all(provider, survivors, profile):
             try:
                 return p, await provider.score(p, profile)
             except Exception as e:
-                return p, Score(value=0, reason=f"score error: {e!r}"[:200], tags=[])
+                return p, Score(value=0, reason=f"score error: {e!r}"[:200], tags=[], ok=False)
 
     return await asyncio.gather(*[one(p) for p in survivors])
 
@@ -102,6 +106,57 @@ async def preview(config, *, provider=None, now=None):
     return stats
 
 
+async def backfill(config, *, provider=None, sheet_sink=None, now=None):
+    """One-time inventory load: rules-filter the CURRENT backlog, score the freshest
+    BACKFILL_CAP survivors, and write those worth tracking into the Sheet. Does NOT
+    touch the seen-set and does NOT ping Discord, so it can neither flood the channel
+    nor change what the live poll considers already-seen. SheetSink dedups, so running
+    it more than once is safe."""
+    now = now or datetime.now(timezone.utc)
+    profile, companies, settings = config.profile, config.companies, config.settings
+    provider = provider or build_provider(settings)
+    if sheet_sink is None:
+        sheet_sink = build_sheet_sink(settings)
+    if sheet_sink is None:
+        raise SystemExit("backfill: no Sheet configured "
+                         "(set GOOGLE_SHEET_ID and GOOGLE_CREDENTIALS_PATH)")
+    cmap = _company_map(companies)
+
+    postings, errors = await fetch_all(companies)
+    postings = _dedup_by_uid(postings)
+    survivors = [p for p in postings if passes_rules(p, profile, now)]
+    # Freshest first, so a capped backfill captures the most relevant current openings.
+    survivors.sort(key=lambda p: p.posted_at or datetime.min.replace(tzinfo=timezone.utc),
+                   reverse=True)
+    to_score = await enrich_postings(survivors[:BACKFILL_CAP], cmap)
+    scored = await _score_all(provider, to_score, profile)
+
+    tracked = 0
+    for p, score in scored:
+        if not score.ok:  # don't write bogus Fit 0 rows when scoring errored (e.g. 429)
+            continue
+        level = classify(p, score, cmap.get((p.ats, p.company)), profile, now)
+        if level is None:
+            continue
+        try:
+            if await asyncio.to_thread(sheet_sink.add, p, score):
+                tracked += 1
+        except Exception as e:
+            errors.append((p.company, f"sheet: {e!r}"))
+
+    score_errors = sum(1 for _, s in scored if not s.ok)
+    stats = {"boards": len(companies), "postings": len(postings), "errors": len(errors),
+             "survivors": len(survivors), "scored": len(scored), "score_errors": score_errors,
+             "truncated": max(0, len(survivors) - BACKFILL_CAP), "tracked": tracked}
+    print("job-radar BACKFILL:", stats)
+    if score_errors:
+        print(f"NOTE: {score_errors} postings failed scoring (likely LLM rate/quota limit); "
+              f"they were skipped, not written. Re-run --backfill once quota resets.")
+    if errors:
+        print("errors (first 10):", errors[:10])
+    return stats
+
+
 async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None, force_prime=False):
     now = now or datetime.now(timezone.utc)
     profile, companies, settings = config.profile, config.companies, config.settings
@@ -142,10 +197,11 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
         level = classify(p, score, company, profile, now)
         if level is None:
             continue
-        # Mirror every real match (incl. digest-level) into the Sheet so it's the full
-        # inventory to triage; Discord stays a heads-up for the urgent ones. A Sheet
-        # hiccup is recorded but can't abort the run (same discipline as the notifier).
-        if sheet_sink is not None:
+        # Mirror real-scored matches (incl. digest-level) into the Sheet so it's the
+        # full inventory to triage; Discord stays a heads-up for the urgent ones. Skip
+        # error scores (e.g. an LLM 429) so a dream-tier post never lands as a bogus
+        # Fit 0 row. A Sheet hiccup is recorded but can't abort the run.
+        if sheet_sink is not None and score.ok:
             try:
                 if await asyncio.to_thread(sheet_sink.add, p, score):
                     tracked += 1
@@ -175,6 +231,7 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
         "boards": len(companies), "postings": len(postings), "errors": len(errors),
         "new": len(new), "primed": 0, "survivors": len(survivors), "pinged": pinged,
         "digest": len(digest), "tracked": tracked,
+        "score_errors": sum(1 for _, s in scored if not s.ok),
     }
     print("job-radar run:", stats)
     if errors:

@@ -24,7 +24,26 @@ def test_parse_score_clamps_and_defaults():
 
     bad = {"nope": 1}
     s2 = parse_score(bad)
-    assert s2.value == 0
+    assert s2.value == 0 and s2.ok is False  # unparseable -> flagged so it's not mirrored
+
+
+async def test_gemini_http_error_marks_score_not_ok():
+    def handler(request):
+        return httpx.Response(429, json={"error": {"message": "quota exceeded"}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        s = await GeminiProvider("KEY", client=client).score(POSTING, PROFILE)
+    assert s.value == 0 and s.ok is False  # a 429 is an error, not a real zero fit
+
+
+async def test_successful_score_is_ok():
+    def handler(request):
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [
+            {"text": '{"score": 72, "reason": "fit", "tags": []}'}]}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        s = await GeminiProvider("KEY", client=client).score(POSTING, PROFILE)
+    assert s.value == 72 and s.ok is True
 
 
 async def test_fake_provider():

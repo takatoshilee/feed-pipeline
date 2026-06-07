@@ -64,7 +64,7 @@ def _extract_json(text: str) -> dict:
 
 def _coerce_score(obj) -> Score:
     if not isinstance(obj, dict) or not obj:
-        return Score(value=0, reason="unparseable LLM response", tags=[])
+        return Score(value=0, reason="unparseable LLM response", tags=[], ok=False)
     try:
         # Tolerate ints, int-strings, floats, and percentages like "85%" / "80.5".
         val = int(round(float(str(obj.get("score", 0)).strip().rstrip("%") or 0)))
@@ -95,7 +95,7 @@ def parse_score(data: dict) -> Score:
     try:
         text = data["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError, TypeError):
-        return Score(value=0, reason="unparseable LLM response", tags=[])
+        return Score(value=0, reason="unparseable LLM response", tags=[], ok=False)
     return _coerce_score(_extract_json(text))
 
 
@@ -122,7 +122,7 @@ class GeminiProvider:
             r.raise_for_status()
             data = r.json()
         except Exception as e:  # never let a scoring error abort the run
-            return Score(value=0, reason=f"LLM error: {e!r}"[:200], tags=[])
+            return Score(value=0, reason=f"LLM error: {e!r}"[:200], tags=[], ok=False)
         finally:
             if owns:
                 await client.aclose()
@@ -173,7 +173,7 @@ class ClaudeProvider:
             data = r.json()
             text = data["content"][0]["text"]
         except Exception as e:
-            return Score(value=0, reason=f"LLM error: {e!r}"[:200], tags=[])
+            return Score(value=0, reason=f"LLM error: {e!r}"[:200], tags=[], ok=False)
         finally:
             if owns:
                 await client.aclose()

@@ -8,6 +8,7 @@ def test_defaults():
     assert a.dry_run is False
     assert a.prime is False
     assert a.preview is False
+    assert a.backfill is False
     assert a.limit is None
     assert a.company is None
     assert a.state is None

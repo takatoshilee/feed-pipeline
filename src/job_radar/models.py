@@ -36,6 +36,7 @@ class Score:
     value: int                    # 0-100
     reason: str
     tags: list[str] = field(default_factory=list, compare=False)
+    ok: bool = field(default=True, compare=False)  # False => scoring errored (value is not a real fit)
 
 
 @dataclass(frozen=True)
