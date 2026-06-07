@@ -61,9 +61,15 @@ title_exclude:
   - portfolio
   - "it systems"
   - "provider data operations"
+  - recruiter
+  - treasury
+  - sales
 
 locations_allow:
-  # Canada
+  # International student: viable = anywhere in Canada + remote (incl. working remotely from
+  # Canada for a US/foreign company). US ON-SITE roles need visa sponsorship, so they're
+  # intentionally NOT allowed here (they get filtered out); US/foreign REMOTE still passes
+  # via "remote", and foreign-remote that needs local authorization is cut by the block-list.
   - toronto
   - ontario
   - canada
@@ -72,34 +78,56 @@ locations_allow:
   - montreal
   - vancouver
   - ottawa
-  # United States (country + major tech hubs; you want US roles too)
-  - "united states"
-  - usa
-  - "new york"
-  - "san francisco"
-  - "bay area"
-  - "san jose"
-  - "palo alto"
-  - "mountain view"
-  - sunnyvale
-  - seattle
-  - boston
-  - austin
-  - "los angeles"
-  - chicago
-  - denver
-  - atlanta
-  - "washington"
-  # Remote (note: bare "remote" also matches foreign "X - Remote"; see TUNING_RECOMMENDATIONS.md)
   - remote
   - "north america"
 
-# To block foreign-remote leaks (e.g. "India - Remote"), add COUNTRY/REGION names here
-# (NOT city names like London -> would cut London, Ontario). The matcher is token-aware:
-# "india" blocks "India - Remote" but not "Indiana"; multi-word phrases ("united kingdom")
-# match as substrings. Empty = allow all (the US coverage above handles the common case).
-# Ready-to-paste list in TUNING_RECOMMENDATIONS.md.
-locations_block: []
+# Block foreign locations (countries/regions only; no city names that collide with North
+# America, e.g. London -> London, Ontario). Token-aware: "india" blocks "India - Remote" but
+# not "Indiana"; "united kingdom" matches as a phrase. This stops roles that need local work
+# authorization from leaking in via the "remote" allow term.
+locations_block:
+  - india
+  - "united kingdom"
+  - ireland
+  - germany
+  - france
+  - spain
+  - netherlands
+  - poland
+  - portugal
+  - italy
+  - switzerland
+  - sweden
+  - norway
+  - denmark
+  - singapore
+  - australia
+  - "new zealand"
+  - japan
+  - korea
+  - china
+  - taiwan
+  - "hong kong"
+  - philippines
+  - indonesia
+  - malaysia
+  - vietnam
+  - thailand
+  - brazil
+  - argentina
+  - colombia
+  - mexico
+  - israel
+  - "united arab emirates"
+  - "saudi arabia"
+  - emea
+  - apac
+  - latam
+  - "asia pacific"
+  - bengaluru
+  - bangalore
+  - hyderabad
+  - pune
 
 freshness_days: 21
 ping_threshold: 65
