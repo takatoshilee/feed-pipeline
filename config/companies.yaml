@@ -147,27 +147,27 @@ companies:
   tier: target
 - slug: rbc
   ats: workday
-  tier: dream
+  tier: target
   wd_host: wd3
   wd_site: RBCEARLYTALENT1
 - slug: cibc
   ats: workday
-  tier: dream
+  tier: target
   wd_host: wd3
   wd_site: campus
 - slug: bmo
   ats: workday
-  tier: dream
+  tier: target
   wd_host: wd3
   wd_site: Campus
 - slug: sunlife
   ats: workday
-  tier: dream
+  tier: target
   wd_host: wd3
   wd_site: Campus
 - slug: td
   ats: workday
-  tier: dream
+  tier: target
   wd_host: wd3
   wd_site: TD_Bank_Careers
 - slug: manulife
