@@ -82,3 +82,21 @@ async def test_pipeline_filters_scores_routes(tmp_path, monkeypatch):
     # second run: nothing new (seen-set persisted)
     stats2 = await pipeline.run(config, provider=FakeProvider(value=90), notifier=FakeNotifier(), now=NOW)
     assert stats2["new"] == 0
+
+
+async def test_force_prime_suppresses_pings_even_when_warm(tmp_path, monkeypatch):
+    async def fake_fetch_all(companies, **kw):
+        return _postings(), []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+
+    config = _config(tmp_path)
+    _prime_seen(config)  # seen-set is non-empty, so this is NOT a cold start
+
+    notifier = FakeNotifier()
+    stats = await pipeline.run(config, provider=FakeProvider(value=90), notifier=notifier,
+                               now=NOW, force_prime=True)
+
+    assert stats["pinged"] == 0      # forced prime suppresses notifications
+    assert notifier.ones == []
+    assert stats["primed"] >= 1      # postings still recorded

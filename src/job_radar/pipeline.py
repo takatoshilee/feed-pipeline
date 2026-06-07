@@ -39,7 +39,7 @@ def build_notifier(settings):
     return DiscordNotifier(settings.webhook_url, settings.role_id)
 
 
-async def run(config, *, provider=None, notifier=None, now=None):
+async def run(config, *, provider=None, notifier=None, now=None, force_prime=False):
     now = now or datetime.now(timezone.utc)
     profile, companies, settings = config.profile, config.companies, config.settings
     provider = provider or build_provider(settings)
@@ -50,11 +50,11 @@ async def run(config, *, provider=None, notifier=None, now=None):
     postings, errors = await fetch_all(companies)
     new = [p for p in postings if seen.is_new(p)]
 
-    # Cold start: with no memory yet, prime the seen-set silently instead of flooding
-    # the channel with the entire current backlog. Real pings begin on the next run.
-    # (If the persisted seen-set is ever lost, the next run re-primes and skips one
-    # cycle of pings: an acceptable trade vs. a flood. M2's durable store removes this.)
-    if seen.is_empty():
+    # Cold start (or explicit --prime): with no memory yet, prime the seen-set silently
+    # instead of flooding the channel with the entire current backlog. Real pings begin
+    # on the next run. (If the persisted seen-set is ever lost, the next run re-primes
+    # and skips one cycle of pings: an acceptable trade vs. a flood.)
+    if force_prime or seen.is_empty():
         for p in new:
             seen.mark(p, now)
         seen.save(now=now)
