@@ -31,7 +31,7 @@ jobs:
           restore-keys: |
             seen-
 
-      - run: pip install -e ".[sheet]"
+      - run: pip install -e ".[sheet,bedrock]"
 
       # Materialize the service-account key (if the secret is set) so the poll can
       # mirror matches into the Google Sheet. No secret => the file is absent and the
@@ -53,6 +53,10 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           DISCORD_ROLE_ID: ${{ secrets.DISCORD_ROLE_ID }}
           LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
           SEEN_PATH: .state/seen.json
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_CREDENTIALS_PATH: google-creds.json
