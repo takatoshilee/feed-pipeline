@@ -41,13 +41,14 @@ def existing_uids(ws) -> set:
     return set(ws.col_values(1)[1:])  # column 1 minus the header
 
 
-def append_match(ws, posting: Posting, score: Score) -> None:
+def _row_values(posting: Posting, score: Score) -> list:
     posted = posting.posted_at.date().isoformat() if posting.posted_at else ""
-    ws.append_row(
-        [posting.uid, posting.company, posting.title, posting.url, score.value,
-         posting.location, posted, "New", "", "", "", ""],
-        value_input_option="USER_ENTERED",
-    )
+    return [posting.uid, posting.company, posting.title, posting.url, score.value,
+            posting.location, posted, "New", "", "", "", ""]
+
+
+def append_match(ws, posting: Posting, score: Score) -> None:
+    ws.append_row(_row_values(posting, score), value_input_option="USER_ENTERED")
 
 
 def _row_for_uid(ws, uid: str):
@@ -78,19 +79,29 @@ def all_records(ws) -> list:
 
 
 class SheetSink:
-    """Mirrors new matches into the tracker Sheet during a poll. Snapshots the
-    existing uids once at construction, so a single run never re-adds a row that
-    is already there (and repeated uids within the run are added only once)."""
+    """Buffers new matches and writes them to the tracker Sheet in one batched call on
+    flush(). Snapshots existing uids at construction so a run never re-adds a row that
+    is already there (and dedups repeats within the run). Batching matters: the Sheets
+    API caps writes at ~60/minute, so one append_rows beats dozens of append_row calls."""
 
     def __init__(self, ws):
         self.ws = ws
         self._seen = existing_uids(ws)
+        self._buffer: list[list] = []
 
     def add(self, posting: Posting, score: Score) -> bool:
-        """Append the posting as a new 'New' row. Returns False (no-op) if its uid
-        is already in the Sheet."""
+        """Queue the posting as a new 'New' row (written on flush). Returns False if its
+        uid is already in the Sheet or already queued this run."""
         if posting.uid in self._seen:
             return False
-        append_match(self.ws, posting, score)
+        self._buffer.append(_row_values(posting, score))
         self._seen.add(posting.uid)
         return True
+
+    def flush(self) -> int:
+        """Write all queued rows in a single batched call. Returns the number written."""
+        if not self._buffer:
+            return 0
+        rows, self._buffer = self._buffer, []
+        self.ws.append_rows(rows, value_input_option="USER_ENTERED")
+        return len(rows)

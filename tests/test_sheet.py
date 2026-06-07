@@ -17,6 +17,10 @@ class FakeWS:
     def append_row(self, vals, value_input_option=None):
         self.rows.append([str(v) for v in vals])
 
+    def append_rows(self, rows, value_input_option=None):
+        for r in rows:
+            self.rows.append([str(v) for v in r])
+
     def col_values(self, c):
         return [(r[c - 1] if c - 1 < len(r) else "") for r in self.rows]
 
@@ -88,10 +92,13 @@ def test_sheet_sink_dedups_against_existing_and_within_run():
     sink = SheetSink(ws)
 
     assert sink.add(_posting(), Score(88, "again")) is False  # uid already present -> no-op
-    assert len(ws.rows) == 2  # header + the one pre-existing row, nothing added
 
     fresh = Posting(uid="lever:cohere:9", ats="lever", company="Cohere", title="ML Intern",
                     location="Remote", url="http://y", posted_at=None, description="d")
     assert sink.add(fresh, Score(91, "new")) is True
     assert sink.add(fresh, Score(91, "dup")) is False  # same uid twice in one run -> once
+    assert len(ws.rows) == 2  # still header + pre-existing row: nothing written until flush
+
+    assert sink.flush() == 1   # one batched write
+    assert sink.flush() == 0   # buffer drained, no-op
     assert existing_uids(ws) == {"greenhouse:stripe:1", "lever:cohere:9"}

@@ -28,7 +28,7 @@ python -m job_radar --dry-run --limit 5        # full pipeline, console output, 
 | `--preview` | Show what would surface from the **current backlog**, ranked by fit. Read-only (no priming, no state writes). Best for tuning `profile.yaml`. |
 | `--dry-run` | Run the full pipeline but print to console instead of posting to Discord. |
 | `--prime` | Mark everything seen without notifying (re-prime; e.g. after broadening the profile). |
-| `--backfill` | One-time: score the current open backlog and write matches to the Sheet (no pings, no state change). Seeds the tracker with today's inventory. Needs the Sheet env vars + an LLM key. |
+| `--backfill` | One-time: score the current open backlog and write strong matches to the Sheet (no pings, no state change). Seeds the tracker with today's inventory. Reaches back `--backfill-days` (default 60, wider than the cron) and writes only `--backfill-min-fit` and up (default 60). Needs the Sheet env vars; works without an LLM key (heuristic). |
 | `--company SLUG` | Only poll one company (local testing). |
 | `--limit N` | Only poll the first N companies. |
 | `--profile / --companies / --state PATH` | Override config/state paths. |
@@ -115,7 +115,9 @@ Embed Links (Guild Install).
 
 `sources` fetch all boards concurrently → `dedup` drops already-seen (and primes
 silently on first run) → `filters` free rules pre-filter → `scorer` LLM-scores
-survivors (Gemini/Claude, enriching Workday/SmartRecruiter descriptions first) →
+survivors (Gemini/Claude, enriching Workday/SmartRecruiter descriptions first; a
+deterministic heuristic transparently covers any posting the LLM can't score, e.g.
+on a rate limit, so an outage degrades coverage instead of dropping it) →
 `urgency` classifies (🔴 fresh+high or dream / 🟡 relevant / 🟢 weak→digest) →
 `notify` posts to Discord. State persists in the Actions cache; a weekly keepalive
 keeps the cron from auto-disabling. Design docs in `docs/superpowers/`.
