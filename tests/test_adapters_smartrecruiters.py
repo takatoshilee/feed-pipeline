@@ -30,3 +30,20 @@ async def test_fetch_smartrecruiters():
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         postings = await sr.fetch(client, Company(slug="ubisoft", ats="smartrecruiters"))
     assert len(postings) == 2
+
+
+async def test_enrich_concats_sections():
+    detail = {"jobAd": {"sections": {
+        "jobDescription": {"text": ""},                         # empty section tolerated
+        "qualifications": {"text": "<p>Python, Java</p>"},
+        "additionalInformation": {"text": "<p>Remote OK</p>"},
+    }}}
+
+    def handler(request):
+        assert "/v1/companies/visa/postings/743999000000001" in str(request.url)
+        return httpx.Response(200, json=detail)
+
+    posting = sr.parse("visa", FIX)[0]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        enriched = await sr.enrich(client, posting, Company(slug="visa", ats="smartrecruiters"))
+    assert "Python, Java" in enriched.description and "Remote OK" in enriched.description

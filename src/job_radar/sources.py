@@ -42,3 +42,39 @@ async def fetch_all(companies, *, concurrency=30, client=None):
             await client.aclose()
     postings = [p for sub in results for p in sub]
     return postings, errors
+
+
+# Adapters that expose enrich() to fetch a full description via a second call.
+ENRICHERS = {"workday", "smartrecruiters"}
+
+
+async def enrich_postings(postings, cmap, *, concurrency=10, client=None):
+    """Fill in descriptions for the given postings (typically the survivors) whose
+    adapter needs a second call. Returns a new list in the same order; failures keep
+    the original posting. No-op for adapters that already include descriptions."""
+    targets = [p for p in postings if p.ats in ENRICHERS and not p.description]
+    if not targets:
+        return list(postings)
+
+    sem = asyncio.Semaphore(concurrency)
+    owns = client is None
+    client = client or httpx.AsyncClient(timeout=TIMEOUT)
+
+    async def one(p):
+        company = cmap.get((p.ats, p.company))
+        if company is None:
+            return p
+        async with sem:
+            try:
+                return await ADAPTERS[p.ats].enrich(client, p, company)
+            except Exception:
+                return p
+
+    try:
+        enriched = await asyncio.gather(*[one(p) for p in targets])
+    finally:
+        if owns:
+            await client.aclose()
+
+    by_uid = {orig.uid: new for orig, new in zip(targets, enriched)}
+    return [by_uid.get(p.uid, p) for p in postings]

@@ -1,12 +1,14 @@
 import re
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from ..models import Company, Posting
-from .base import get_json
+from .base import get_json, strip_html
 
 # Per-tenant CXS endpoint. tenant = company.slug, host = company.wd_host (e.g. "wd5"),
 # site = company.wd_site (e.g. "NVIDIAExternalCareerSite").
 CXS = "https://{tenant}.{host}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
+DETAIL = "https://{tenant}.{host}.myworkdayjobs.com/wday/cxs/{tenant}/{site}{ext}"
 
 
 def _posted_at(posted_on: str | None, now: datetime) -> datetime | None:
@@ -65,3 +67,17 @@ async def fetch(client, company: Company, *, now=None, page_limit=5, page_size=2
         if not payload.get("jobPostings") or (page + 1) * page_size >= total:
             break
     return out
+
+
+async def enrich(client, posting: Posting, company: Company) -> Posting:
+    """Fetch the full job description for a single posting (second call)."""
+    ext = posting.raw.get("externalPath")
+    if not ext or not company.wd_host or not company.wd_site:
+        return posting
+    url = DETAIL.format(tenant=company.slug, host=company.wd_host, site=company.wd_site, ext=ext)
+    try:
+        data = await get_json(client, url)
+    except Exception:
+        return posting
+    desc = strip_html((data.get("jobPostingInfo") or {}).get("jobDescription", "") or "")
+    return replace(posting, description=desc) if desc else posting
