@@ -1,0 +1,13 @@
+# Canadian banks / enterprises on Workday (for Fall 2026 co-op recruiting).
+# slug,workday,tier,wd_host,wd_site  -- all probed live before adding.
+# Student / early-talent sites (highest signal):
+rbc,workday,dream,wd3,RBCEARLYTALENT1
+cibc,workday,dream,wd3,campus
+bmo,workday,dream,wd3,Campus
+sunlife,workday,dream,wd3,Campus
+# General sites (filter narrows to student/tech):
+td,workday,dream,wd3,TD_Bank_Careers
+manulife,workday,target,wd3,MFCJH_Jobs
+omers,workday,target,wd3,OMERS_External
+cppib,workday,target,wd10,cppinvestments
+telusinternational,workday,target,wd3,External

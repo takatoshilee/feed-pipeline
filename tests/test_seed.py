@@ -11,6 +11,13 @@ def test_parse_line_valid_and_invalid():
     assert parse_line("acme, notarealats") is None  # unknown ats rejected
 
 
+def test_parse_line_workday_needs_host_and_site():
+    assert parse_line("nvidia,workday,dream,wd5,NVIDIASite") == {
+        "slug": "nvidia", "ats": "workday", "tier": "dream",
+        "wd_host": "wd5", "wd_site": "NVIDIASite"}
+    assert parse_line("nvidia,workday,dream") is None  # missing host/site -> rejected
+
+
 def test_merge_dedups_and_adds():
     existing = [{"slug": "stripe", "ats": "greenhouse", "tier": "target"}]
     lines = [
