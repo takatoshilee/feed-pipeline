@@ -6,7 +6,7 @@ from .filters import passes_rules
 from .models import Urgency
 from .notify import ConsoleNotifier, DiscordNotifier
 from .scorer import FakeProvider, GeminiProvider
-from .sources import fetch_all
+from .sources import enrich_postings, fetch_all
 from .urgency import classify
 
 SCORE_CONCURRENCY = 6
@@ -66,6 +66,7 @@ async def run(config, *, provider=None, notifier=None, now=None):
         return stats
 
     survivors = [p for p in new if passes_rules(p, profile, now)]
+    survivors = await enrich_postings(survivors, cmap)  # fill descriptions for the few that need it
     scored = await _score_all(provider, survivors, profile)
 
     digest = []
