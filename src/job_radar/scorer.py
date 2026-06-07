@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import httpx
@@ -189,6 +190,43 @@ class ClaudeProvider:
         finally:
             if owns:
                 await client.aclose()
+        return _coerce_score(_extract_json(text))
+
+
+# --- AWS Bedrock (Claude via the Converse API) ---
+
+class BedrockProvider:
+    """Scores via Amazon Bedrock's Converse API (model-agnostic; defaults to a Claude).
+    Uses boto3 (lazy import) so AWS SigV4 auth and the default credential chain are handled
+    for us: set AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION (or an instance role).
+    Bedrock isn't on Gemini's tiny free-tier daily quota, so it's the durable scorer."""
+
+    def __init__(self, model: str = "anthropic.claude-3-5-haiku-20241022-v1:0",
+                 region: str | None = None, client=None):
+        self.model = model
+        self.region = region
+        self._client = client
+
+    def _bedrock(self):
+        if self._client is None:
+            import boto3
+            self._client = boto3.client("bedrock-runtime", region_name=self.region)
+        return self._client
+
+    async def score(self, posting: Posting, profile: Profile) -> Score:
+        system = [{"text": f"{INSTRUCTIONS}\n\n{_candidate_block(profile)}"}]
+        messages = [{"role": "user", "content": [{"text": _posting_block(posting)}]}]
+
+        def call():
+            return self._bedrock().converse(
+                modelId=self.model, system=system, messages=messages,
+                inferenceConfig={"maxTokens": 400, "temperature": 0.2})
+
+        try:
+            resp = await asyncio.to_thread(call)
+            text = resp["output"]["message"]["content"][0]["text"]
+        except Exception as e:
+            return Score(value=0, reason=f"LLM error: {e!r}"[:200], tags=[], ok=False)
         return _coerce_score(_extract_json(text))
 
 
