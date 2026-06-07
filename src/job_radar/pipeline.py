@@ -5,7 +5,7 @@ from .dedup import SeenStore
 from .filters import passes_rules
 from .models import Urgency
 from .notify import ConsoleNotifier, DiscordNotifier
-from .scorer import FakeProvider, GeminiProvider
+from .scorer import ClaudeProvider, FakeProvider, GeminiProvider
 from .sources import enrich_postings, fetch_all
 from .urgency import classify
 
@@ -28,9 +28,11 @@ async def _score_all(provider, survivors, profile):
 
 
 def build_provider(settings):
-    if settings.llm_api_key:
-        return GeminiProvider(settings.llm_api_key, settings.llm_model)
-    return FakeProvider(value=70, reason="no LLM key; placeholder score")
+    if not settings.llm_api_key:
+        return FakeProvider(value=70, reason="no LLM key; placeholder score")
+    if settings.llm_provider == "claude":
+        return ClaudeProvider(settings.llm_api_key, settings.llm_model or "claude-haiku-4-5")
+    return GeminiProvider(settings.llm_api_key, settings.llm_model or "gemini-2.0-flash")
 
 
 def build_notifier(settings):

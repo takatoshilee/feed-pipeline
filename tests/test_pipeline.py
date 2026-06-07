@@ -34,7 +34,7 @@ def _config(tmp_path):
     profile = Profile(summary="s", title_include=["intern"], title_exclude=["senior"],
                       locations_allow=["toronto"], locations_block=[], freshness_days=21)
     companies = [Company(slug="c", ats="greenhouse", tier="target")]
-    settings = Settings(webhook_url=None, llm_api_key=None, llm_model="m",
+    settings = Settings(webhook_url=None, llm_api_key=None, llm_model="m", llm_provider="gemini",
                         role_id=None, seen_path=str(tmp_path / "seen.json"), dry_run=True)
     return Config(profile, companies, settings)
 
