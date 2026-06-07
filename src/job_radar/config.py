@@ -10,7 +10,8 @@ from .models import Company, Profile
 class Settings:
     webhook_url: str | None
     llm_api_key: str | None
-    llm_model: str
+    llm_model: str          # "" => provider default
+    llm_provider: str       # "gemini" | "claude"
     role_id: str | None
     seen_path: str
     dry_run: bool
@@ -64,7 +65,8 @@ def load_settings() -> Settings:
     return Settings(
         webhook_url=webhook,
         llm_api_key=key,
-        llm_model=os.environ.get("LLM_MODEL", "gemini-2.0-flash"),
+        llm_model=os.environ.get("LLM_MODEL", ""),
+        llm_provider=os.environ.get("LLM_PROVIDER", "gemini").lower(),
         role_id=os.environ.get("DISCORD_ROLE_ID") or None,
         seen_path=os.environ.get("SEEN_PATH", ".state/seen.json"),
         dry_run=dry,

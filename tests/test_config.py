@@ -34,7 +34,8 @@ def test_load_settings_dry_run_when_no_webhook(monkeypatch):
     monkeypatch.delenv("DRY_RUN", raising=False)
     s = load_settings()
     assert s.dry_run is True
-    assert s.llm_model == "gemini-2.0-flash"
+    assert s.llm_provider == "gemini"   # default provider
+    assert s.llm_model == ""            # "" => provider default, resolved in build_provider
 
 
 def test_load_settings_live_when_webhook_present(monkeypatch):
