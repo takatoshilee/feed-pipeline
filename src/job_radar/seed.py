@@ -2,9 +2,10 @@
 
 Run: python -m job_radar.seed <list.csv> [config/companies.yaml]
 
-Each line: ``slug,ats[,tier]`` (comma or tab separated). Lines starting with
-``#`` are ignored. Entries are deduped against what's already in the YAML, so
-this is safe to run repeatedly against community-maintained slug dumps.
+Each line: ``slug,ats[,tier]`` (comma or tab separated). Workday rows need two
+more fields: ``slug,workday,tier,wd_host,wd_site``. Lines starting with ``#``
+are ignored. Entries are deduped against what's already in the YAML, so this is
+safe to run repeatedly against community-maintained slug dumps.
 """
 import sys
 from pathlib import Path
@@ -25,7 +26,12 @@ def parse_line(line: str) -> dict | None:
     if ats not in VALID_ATS:
         return None
     tier = parts[2].lower() if len(parts) > 2 else "target"
-    return {"slug": slug, "ats": ats, "tier": tier}
+    rec = {"slug": slug, "ats": ats, "tier": tier}
+    if ats == "workday":
+        if len(parts) < 5:
+            return None  # workday needs wd_host + wd_site
+        rec["wd_host"], rec["wd_site"] = parts[3], parts[4]
+    return rec
 
 
 def merge(existing: list[dict], lines) -> tuple[list[dict], int]:
