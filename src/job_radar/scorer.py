@@ -7,12 +7,24 @@ from .models import Posting, Profile, Score
 # --- shared prompt pieces (provider-neutral) ---
 
 INSTRUCTIONS = (
-    "You are screening job postings for one specific candidate. Rate how well this "
-    "posting fits THIS candidate from 0 (no fit) to 100 (perfect fit). The candidate "
-    "is a student / early-career; penalize senior, staff, and manager roles and anything "
-    "needing several years of experience. Consider role type, seniority, location, and "
-    "skill overlap. Respond as JSON {score, reason, tags}; reason is one short sentence; "
-    "tags is a short list of lowercase labels."
+    "You screen internship / new-grad postings for ONE specific candidate (described "
+    "below). Read the role's actual requirements and qualifications, then score 0-100 by "
+    "judging TWO things together:\n"
+    "1) REALISTIC CHANCE: would this candidate plausibly be competitive? Compare the "
+    "stated requirements to the candidate's real skills and year in school. Heavily "
+    "penalize roles that need a domain or skill the candidate does NOT list (e.g. "
+    "Android/iOS/mobile, embedded/firmware/hardware, kernel, game/graphics, a specific "
+    "language they never mention), senior/staff/manager titles, security clearance, or "
+    "several years of experience. A role titled 'Software Engineer Intern' in a domain "
+    "they have no background in is a WEAK match, not a strong one, even though the title "
+    "looks right.\n"
+    "2) GOOD FOR THEM: reward strong overlap with the candidate's listed strengths and "
+    "target roles (SWE / AI-ML / data). Give PARTIAL credit to sensible tangential "
+    "stretches that still use those strengths (e.g. a data or full-stack role at an AI "
+    "company). Be calibrated: most postings should land 30-70; reserve 80+ for genuinely "
+    "strong, realistic matches.\n"
+    "Respond as JSON {score, reason, tags}; reason = one short sentence naming the key fit "
+    "or gap; tags = a few lowercase labels."
 )
 
 
@@ -193,6 +205,13 @@ _CORE = ("software", "developer", "engineer", "swe", "backend", "back end", "bac
 _TECH = ("python", "java", "javascript", "typescript", "react", "node", "golang", "rust",
          "c++", "sql", "aws", "gcp", "azure", "docker", "kubernetes", "pytorch", "tensorflow",
          "llm", "nlp", "api", "fastapi", "django", "flask", "next.js", "postgres", "spark")
+# Domains the candidate has NO background in: a title in one of these is a weak match even
+# if it says "Software Engineer Intern". (Tracks this candidate's gaps; the LLM judges this
+# properly from the description -- this just keeps the offline fallback from over-scoring.)
+_MISMATCH = ("android", "ios", "mobile", "embedded", "firmware", "hardware", "fpga",
+             "verilog", "rtl", "asic", "kernel", "device driver", "mechanical", "electrical",
+             "analog", "silicon", "photonics", "rf ", "game", "graphics", "rendering",
+             "unreal engine", "shader")
 
 
 def heuristic_score(posting: Posting, profile: Profile) -> Score:
@@ -214,6 +233,8 @@ def heuristic_score(posting: Posting, profile: Profile) -> Score:
     if any(c in title for c in _CORE):
         score += 8
     score += min(12, sum(3 for t in _TECH if t in text))
+    if any(m in title for m in _MISMATCH):  # specialized domain the candidate lacks
+        score -= 22
 
     score = max(0, min(100, score))
     return Score(value=score, reason="heuristic (LLM unavailable): title + skill match",
