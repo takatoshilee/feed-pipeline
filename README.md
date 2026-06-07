@@ -69,6 +69,29 @@ request to `/wday/cxs/<tenant>/<site>/jobs`. The host is the `wdN` part
 5. Trigger once via the Actions tab (confirm a `PRIMED` run — the first run primes
    silently so you aren't flooded), then the ~15-min cron takes over.
 
+## v2: interactive tracker bot
+
+An always-on bot that tracks applications in a Google Sheet, pings Discord with
+**Applied / Not for me** buttons, answers slash commands, and sends daily reminders.
+Design: `docs/superpowers/specs/2026-06-07-tracker-bot-design.md`.
+
+```bash
+pip install -e ".[bot]"
+python -m job_radar.bot
+```
+
+One-time setup, then put the values in a git-ignored `.env`:
+```
+DISCORD_BOT_TOKEN=...        # Discord Developer Portal -> your app -> Bot
+DISCORD_CHANNEL_ID=...       # right-click #channel -> Copy Channel ID (Developer Mode on)
+GOOGLE_SHEET_ID=...          # from the Sheet URL between /d/ and /edit
+GOOGLE_CREDENTIALS_PATH=google-creds.json   # service-account JSON key
+LLM_API_KEY=...              # same Gemini key as v1
+```
+- Discord bot invite scopes: `bot` + `applications.commands`; permissions: Send Messages + Embed Links (Guild Install).
+- Google: enable the Sheets API, make a **service account**, download its JSON key, and share the Sheet with the service-account email (Editor).
+- Slash commands: `/pending` `/top` `/due` `/stats`. The Sheet is the source of truth (edit it directly too). First run primes silently.
+
 ## How it works
 
 `sources` fetch all boards concurrently → `dedup` drops already-seen (and primes
