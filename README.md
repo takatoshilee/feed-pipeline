@@ -63,8 +63,14 @@ request to `/wday/cxs/<tenant>/<site>/jobs`. The host is the `wdN` part
 ## Going live (free, GitHub Actions)
 
 1. Create a Discord channel + webhook; copy the URL.
-2. Get an LLM key. Default scorer is **Gemini Flash** (free tier). For **Claude**,
-   set `LLM_PROVIDER=claude` (defaults to Haiku 4.5; override with `LLM_MODEL`).
+2. Get an LLM key. Default scorer is **Gemini Flash** (free tier, `gemini-2.5-flash`).
+   For **Claude** (Anthropic API), set `LLM_PROVIDER=claude` (defaults to Haiku 4.5).
+   For **AWS Bedrock** (no per-day free-tier cap, best if you have AWS): `pip install
+   -e ".[bedrock]"`, set `LLM_PROVIDER=bedrock`, add `AWS_ACCESS_KEY_ID` /
+   `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` secrets, and set `LLM_MODEL` to your enabled
+   Bedrock model id (e.g. `anthropic.claude-3-5-haiku-20241022-v1:0`, or a `us.`/`eu.`
+   inference-profile variant for your region). Any scorer falls back to a free
+   deterministic heuristic if it errors, so a quota blip never drops coverage.
 3. `gh repo create job-radar --private --source=. --remote=origin --push`
 4. Repo Settings → Secrets → Actions: `DISCORD_WEBHOOK_URL`, `LLM_API_KEY`,
    optional `DISCORD_ROLE_ID`, `LLM_PROVIDER`.

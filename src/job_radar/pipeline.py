@@ -7,7 +7,8 @@ from .dedup import SeenStore
 from .filters import passes_rules
 from .models import Score, Urgency
 from .notify import ConsoleNotifier, DiscordNotifier
-from .scorer import (ClaudeProvider, FallbackProvider, GeminiProvider, HeuristicProvider)
+from .scorer import (BedrockProvider, ClaudeProvider, FallbackProvider, GeminiProvider,
+                     HeuristicProvider)
 from .sources import enrich_postings, fetch_all
 from .urgency import classify
 
@@ -56,6 +57,11 @@ def build_provider(settings):
     scoring error (rate limit / outage) transparently falls back to the heuristic instead
     of dropping the posting. The radar stays useful even when the LLM is unavailable."""
     heuristic = HeuristicProvider()
+    if settings.llm_provider == "bedrock":
+        # Bedrock auths via the AWS credential chain (env/role), not an API key, so it's
+        # available even without LLM_API_KEY.
+        primary = BedrockProvider(settings.llm_model or "anthropic.claude-3-5-haiku-20241022-v1:0")
+        return FallbackProvider(primary, heuristic)
     if not settings.llm_api_key:
         return heuristic
     if settings.llm_provider == "claude":
