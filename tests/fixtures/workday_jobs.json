@@ -1,0 +1,19 @@
+{
+  "total": 2,
+  "jobPostings": [
+    {
+      "title": "Software Engineer Intern",
+      "externalPath": "/job/Toronto-ON/Software-Engineer-Intern_R-1001",
+      "locationsText": "Toronto, ON, Canada",
+      "postedOn": "Posted Today",
+      "bulletFields": ["R-1001"]
+    },
+    {
+      "title": "Senior Engineering Manager",
+      "externalPath": "/job/Santa-Clara/Senior-Engineering-Manager_R-1002",
+      "locationsText": "Santa Clara, CA",
+      "postedOn": "Posted 10 Days Ago",
+      "bulletFields": ["R-1002"]
+    }
+  ]
+}
