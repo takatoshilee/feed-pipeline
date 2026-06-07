@@ -197,6 +197,18 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
             print("errors (first 10):", errors[:10])
         return stats
 
+    # Per-company silent prime: a board newly added to the watch-list would otherwise have
+    # its ENTIRE current backlog look "new" and flood the channel on the first poll. Absorb
+    # those silently (they still get marked seen in the end-of-run sweep), so only their
+    # genuinely-new future postings ping. Race-free: no separate re-prime step to mistime.
+    known = seen.known_companies()
+    fresh_co = {(c.ats, c.slug) for c in companies if (c.ats, c.slug) not in known}
+    primed_new = 0
+    if fresh_co:
+        kept = [p for p in new if (p.ats, p.company) not in fresh_co]
+        primed_new = len(new) - len(kept)
+        new = kept
+
     survivors = [p for p in new if passes_rules(p, profile, now)]
     survivors = await enrich_postings(survivors, cmap)  # fill descriptions for the few that need it
     scored = await _score_all(provider, survivors, profile)
@@ -244,7 +256,7 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
 
     stats = {
         "boards": len(companies), "postings": len(postings), "errors": len(errors),
-        "new": len(new), "primed": 0, "survivors": len(survivors), "pinged": pinged,
+        "new": len(new), "primed": primed_new, "survivors": len(survivors), "pinged": pinged,
         "digest": len(digest), "tracked": tracked,
         "score_errors": sum(1 for _, s in scored if not s.ok),
     }

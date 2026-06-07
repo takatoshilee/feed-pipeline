@@ -32,6 +32,17 @@ class SeenStore:
     def is_empty(self) -> bool:
         return not self._seen
 
+    def known_companies(self) -> set:
+        """The (ats, slug) pairs the store has ever seen a posting from. A board absent
+        here is newly added, so its backlog should be primed silently, not pinged.
+        (uid is 'ats:slug:native_id'; native_id may contain colons, the first two don't.)"""
+        out = set()
+        for uid in self._seen:
+            parts = uid.split(":", 2)
+            if len(parts) >= 2:
+                out.add((parts[0], parts[1]))
+        return out
+
     def is_new(self, posting: Posting) -> bool:
         return posting.uid not in self._seen
 
