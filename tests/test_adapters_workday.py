@@ -52,6 +52,22 @@ async def test_fetch_paginates():
     assert len(postings) == 25  # 20 + 5 across two pages
 
 
+async def test_fetch_continues_when_total_drops_to_zero_on_later_pages():
+    # Real Workday behavior: total is populated only on page 1; later pages report
+    # total=0 but still return full pages. The adapter must not stop on total=0.
+    def handler(request):
+        offset = json.loads(request.read().decode())["offset"]
+        total = 50 if offset == 0 else 0           # only page 1 carries the real total
+        n = 20 if offset < 40 else 10              # 20 + 20 + 10 = 50 across 3 pages
+        return httpx.Response(200, json={"total": total, "jobPostings": [
+            {"title": f"Job {offset + i}", "externalPath": f"/job/x/R-{offset + i}",
+             "locationsText": "Remote", "postedOn": "Posted Today"} for i in range(n)]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        postings = await workday.fetch(client, COMPANY, now=NOW)
+    assert len(postings) == 50  # not capped at 40 by the total=0 bug
+
+
 async def test_fetch_returns_empty_when_misconfigured():
     company = Company(slug="x", ats="workday")  # no wd_host/wd_site
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=FIX))) as client:

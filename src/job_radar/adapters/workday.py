@@ -49,7 +49,10 @@ def parse(tenant: str, site: str, base_url: str, payload: dict,
     return out
 
 
-async def fetch(client, company: Company, *, now=None, page_limit=5, page_size=20) -> list[Posting]:
+async def fetch(client, company: Company, *, now=None, page_limit=8, page_size=20) -> list[Posting]:
+    # Workday quirks: `total` is reported only on page 1 (later pages send total=0 but
+    # still return a full page), and the API rejects limit > 20. So we capture the
+    # total once and stop only on a short/empty page or once that total is covered.
     if not company.wd_host or not company.wd_site:
         return []  # misconfigured workday entry: needs wd_host + wd_site
     now = now or datetime.now(timezone.utc)
@@ -58,13 +61,17 @@ async def fetch(client, company: Company, *, now=None, page_limit=5, page_size=2
     url = CXS.format(tenant=tenant, host=host, site=site)
 
     out: list[Posting] = []
+    total = None
     for page in range(page_limit):
         body = {"appliedFacets": {}, "limit": page_size, "offset": page * page_size, "searchText": ""}
         payload = await get_json(client, url, method="POST", json_body=body)
-        batch = parse(tenant, site, base_url, payload, now)
-        out.extend(batch)
-        total = payload.get("total", 0)
-        if not payload.get("jobPostings") or (page + 1) * page_size >= total:
+        batch = payload.get("jobPostings") or []
+        out.extend(parse(tenant, site, base_url, payload, now))
+        if total is None:
+            total = payload.get("total") or 0
+        full_page = len(batch) == page_size
+        reached_total = bool(total) and (page + 1) * page_size >= total
+        if not full_page or reached_total:
             break
     return out
 
