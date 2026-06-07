@@ -5,7 +5,7 @@ import httpx
 from job_radar.models import Posting, Profile, Score
 from job_radar.scorer import (build_prompt, parse_score, _extract_json, heuristic_score,
                               GeminiProvider, ClaudeProvider, FakeProvider,
-                              HeuristicProvider, FallbackProvider)
+                              HeuristicProvider, FallbackProvider, BedrockProvider)
 
 PROFILE = Profile(summary="CS student", title_include=[], title_exclude=[],
                   locations_allow=[], locations_block=[], freshness_days=21)
@@ -136,6 +136,32 @@ def test_build_provider_wraps_llm_and_falls_back_keyless():
     assert isinstance(keyless, HeuristicProvider)
     withkey = build_provider(types.SimpleNamespace(llm_api_key="K", llm_provider="gemini", llm_model=""))
     assert isinstance(withkey, FallbackProvider)
+    # Bedrock auths via the AWS chain, so it's selected even without an API key.
+    bedrock = build_provider(types.SimpleNamespace(llm_api_key=None, llm_provider="bedrock", llm_model=""))
+    assert isinstance(bedrock, FallbackProvider)
+
+
+async def test_bedrock_provider_parses_converse_response():
+    class FakeBedrock:
+        def converse(self, **kw):
+            self.kw = kw
+            return {"output": {"message": {"content": [
+                {"text": '{"score": 77, "reason": "solid match", "tags": ["ai"]}'}]}}}
+
+    fb = FakeBedrock()
+    s = await BedrockProvider("model-x", client=fb).score(POSTING, PROFILE)
+    assert s.value == 77 and "solid match" in s.reason and s.ok is True
+    assert fb.kw["modelId"] == "model-x"          # the configured model is used
+    assert fb.kw["system"][0]["text"].startswith("You screen")  # instructions sent as system
+
+
+async def test_bedrock_error_marks_not_ok():
+    class BadBedrock:
+        def converse(self, **kw):
+            raise RuntimeError("AccessDeniedException")
+
+    s = await BedrockProvider("m", client=BadBedrock()).score(POSTING, PROFILE)
+    assert s.value == 0 and s.ok is False           # falls through to the heuristic in build_provider
 
 
 async def test_claude_provider_posts_and_parses():
