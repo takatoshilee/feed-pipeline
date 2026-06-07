@@ -66,10 +66,9 @@ title_exclude:
   - sales
 
 locations_allow:
-  # International student: viable = anywhere in Canada + remote (incl. working remotely from
-  # Canada for a US/foreign company). US ON-SITE roles need visa sponsorship, so they're
-  # intentionally NOT allowed here (they get filtered out); US/foreign REMOTE still passes
-  # via "remote", and foreign-remote that needs local authorization is cut by the block-list.
+  # International student. Canada + remote are the easy paths. US ON-SITE is now ALSO allowed
+  # (Taka wants to take shots) but those rows get tagged "needs J-1 visa" in the Sheet so he
+  # knows they need sponsorship. Foreign (non-US/Canada) locations stay cut by the block-list.
   - toronto
   - ontario
   - canada
@@ -80,6 +79,39 @@ locations_allow:
   - ottawa
   - remote
   - "north america"
+  # US: country terms + major tech hubs (city names, less collision-prone than 2-letter codes)
+  - "united states"
+  - usa
+  - "u.s."
+  - san francisco
+  - "new york"
+  - seattle
+  - austin
+  - boston
+  - los angeles
+  - palo alto
+  - mountain view
+  - sunnyvale
+  - san jose
+  - san mateo
+  - santa clara
+  - menlo park
+  - bay area
+  - chicago
+  - denver
+  - atlanta
+  - bellevue
+  - redmond
+  - cupertino
+  - san diego
+  - pittsburgh
+  - raleigh
+  - dallas
+  - philadelphia
+  - washington
+  - phoenix
+  - nashville
+  - miami
 
 # Block foreign locations (countries/regions only; no city names that collide with North
 # America, e.g. London -> London, Ontario). Token-aware: "india" blocks "India - Remote" but
