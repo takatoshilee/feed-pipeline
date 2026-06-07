@@ -100,3 +100,17 @@ async def test_force_prime_suppresses_pings_even_when_warm(tmp_path, monkeypatch
     assert stats["pinged"] == 0      # forced prime suppresses notifications
     assert notifier.ones == []
     assert stats["primed"] >= 1      # postings still recorded
+
+
+async def test_preview_is_read_only_and_ranks(tmp_path, monkeypatch):
+    async def fake_fetch_all(companies, **kw):
+        return _postings(), []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    config = _config(tmp_path)
+    stats = await pipeline.preview(config, provider=FakeProvider(value=90, reason="r"))
+
+    assert stats["survivors"] == 1   # only the intern passes rules
+    assert stats["scored"] == 1
+    import os
+    assert not os.path.exists(config.settings.seen_path)  # read-only: no state written
