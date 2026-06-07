@@ -16,6 +16,9 @@ def test_parse_line_workday_needs_host_and_site():
         "slug": "nvidia", "ats": "workday", "tier": "dream",
         "wd_host": "wd5", "wd_site": "NVIDIASite"}
     assert parse_line("nvidia,workday,dream") is None  # missing host/site -> rejected
+    # An empty field must be rejected, not silently shifted into a later column.
+    assert parse_line("nvidia,workday,dream,,NVIDIASite") is None  # empty wd_host
+    assert parse_line("nvidia,workday,dream,wd5,") is None         # empty wd_site
 
 
 def test_merge_dedups_and_adds():

@@ -25,6 +25,11 @@ async def check(client, company):
         return (company, "no-adapter", 0)
     try:
         posts = await adapter.fetch(client, company)
+    except httpx.HTTPStatusError as e:
+        # Only a 404 means the board truly doesn't exist. 5xx/429/403/etc. are
+        # transient or access issues and must NOT cause --prune to delete the board.
+        code = e.response.status_code
+        return (company, "dead" if code == 404 else f"error:{code}", 0)
     except Exception as e:
         return (company, f"error:{type(e).__name__}", 0)
     return (company, "ok" if posts else "empty", len(posts))
@@ -47,7 +52,8 @@ async def run_validate(companies, *, concurrency=20, client=None):
 
 
 def is_dead(status: str) -> bool:
-    return status.startswith("error") or status == "no-adapter"
+    # Prune only confirmed-missing boards (404 / no adapter), never a transient error.
+    return status == "dead" or status == "no-adapter"
 
 
 def prune(companies, results):

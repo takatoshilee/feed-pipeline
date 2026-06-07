@@ -6,12 +6,15 @@ API = "https://api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=
 
 def parse(slug: str, payload: dict) -> list[Posting]:
     out = []
-    for j in payload.get("jobs", []):
+    for j in payload.get("jobs") or []:   # null-safe
         if j.get("isListed") is False:
+            continue
+        jid = j.get("id")
+        if jid is None:
             continue
         desc = j.get("descriptionPlain") or strip_html(j.get("descriptionHtml", ""))
         out.append(Posting(
-            uid=f"ashby:{slug}:{j['id']}",
+            uid=f"ashby:{slug}:{jid}",
             ats="ashby",
             company=slug,
             title=j.get("title", "") or "",

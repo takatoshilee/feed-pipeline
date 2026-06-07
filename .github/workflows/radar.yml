@@ -14,6 +14,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 14   # never bleed into the next 15-min cron window (queue serializes runs)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -7,9 +7,12 @@ API = "https://api.lever.co/v0/postings/{slug}?mode=json"
 def parse(slug: str, payload: list) -> list[Posting]:
     out = []
     for j in payload or []:
+        jid = j.get("id")
+        if jid is None:
+            continue
         cats = j.get("categories") or {}
         out.append(Posting(
-            uid=f"lever:{slug}:{j['id']}",
+            uid=f"lever:{slug}:{jid}",
             ats="lever",
             company=slug,
             title=j.get("text", "") or "",

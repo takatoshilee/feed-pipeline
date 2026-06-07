@@ -33,15 +33,17 @@ def parse(tenant: str, site: str, base_url: str, payload: dict,
           now: datetime | None = None) -> list[Posting]:
     now = now or datetime.now(timezone.utc)
     out = []
-    for j in payload.get("jobPostings", []):
+    for j in payload.get("jobPostings") or []:   # null-safe
         ext = j.get("externalPath", "") or ""
+        if not ext:
+            continue  # no stable id/url without externalPath
         out.append(Posting(
-            uid=f"workday:{tenant}:{ext or j.get('title', '')}",
+            uid=f"workday:{tenant}:{ext}",
             ats="workday",
             company=tenant,
             title=j.get("title", "") or "",
             location=j.get("locationsText", "") or "",
-            url=f"{base_url}/{site}{ext}" if ext else base_url,
+            url=f"{base_url}/{site}{ext}",
             posted_at=_posted_at(j.get("postedOn"), now),
             description="",  # Workday needs a second call for the body; score on title+location
             raw=j,

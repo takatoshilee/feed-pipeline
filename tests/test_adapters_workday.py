@@ -26,6 +26,15 @@ def test_parse_builds_uid_url_and_relative_dates():
     assert postings[1].posted_at == NOW - timedelta(days=10)   # "Posted 10 Days Ago"
 
 
+def test_parse_skips_missing_external_path_and_null_safe():
+    assert workday.parse("t", "Site", BASE, {"jobPostings": None}, NOW) == []  # null-safe
+    postings = workday.parse("t", "Site", BASE, {"jobPostings": [
+        {"title": "no path", "postedOn": "Posted Today"},  # no externalPath -> skipped
+        {"title": "ok", "externalPath": "/job/x/R-1", "locationsText": "T", "postedOn": "Posted Today"},
+    ]}, NOW)
+    assert len(postings) == 1 and postings[0].uid == "workday:t:/job/x/R-1"
+
+
 async def test_fetch_single_page():
     def handler(request):
         assert "/wday/cxs/nvidia/NVIDIAExternalCareerSite/jobs" in str(request.url)
