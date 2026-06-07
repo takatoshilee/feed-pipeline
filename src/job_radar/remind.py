@@ -10,27 +10,40 @@ from .config import load_settings
 from .notify import ConsoleNotifier, DiscordNotifier
 
 
+def _fmt(rows, withfit=True):
+    def line(r):
+        tail = f" ({tracker.fit(r)}/100)" if withfit else ""
+        due = f" · due {r.get('Deadline')}" if r.get("Deadline") else ""
+        return f"- {r.get('Role', '?')} @ {r.get('Company', '?')}{tail}{due}"
+    return "\n".join(line(r) for r in rows)
+
+
 def build_message(records, today: date) -> str | None:
     """Compose the reminder body from the Sheet rows, or None if there's nothing to nag
-    about. 'Due soon' = pending with a deadline within 3 days; 'strong, not applied' =
-    pending, fit >= 80, sitting for a few days."""
+    about. Leads with a catch-up header (how many pending, days since Taka last applied)
+    so a busy stretch surfaces the backlog, then: must-apply (his priority flags) ->
+    due-soon (deadline within 3 days) -> strong-but-unapplied (fit >= 80, a few days old)."""
+    must = tracker.must_apply(records)
     due = tracker.due_soon(records, today, within_days=3)
     nudge = tracker.unapplied_strong(records, today, min_fit=80, older_than_days=3)
-    if not due and not nudge:
+    if not (must or due or nudge):
         return None
 
     parts = []
+    pending = tracker.pending_count(records)
+    la = tracker.last_active(records)
+    if la is not None:
+        parts.append(f"_{pending} pending · last applied {(today - la).days}d ago_")
+    elif pending:
+        parts.append(f"_{pending} pending · nothing applied yet_")
+
+    if must:
+        parts.append("**Must apply (your priority)**\n" + _fmt(must[:10]))
     if due:
-        lines = "\n".join(
-            f"- {r.get('Role', '?')} @ {r.get('Company', '?')} (due {r.get('Deadline')})"
-            for r in due[:10])
-        parts.append("**Due soon**\n" + lines)
+        parts.append("**Due soon**\n" + _fmt(due[:10], withfit=False))
     if nudge:
-        lines = "\n".join(
-            f"- {r.get('Role', '?')} @ {r.get('Company', '?')} ({tracker.fit(r)}/100)"
-            for r in nudge[:10])
         more = f"\n...and {len(nudge) - 10} more" if len(nudge) > 10 else ""
-        parts.append(f"**Strong, not applied yet ({len(nudge)})**\n" + lines + more)
+        parts.append(f"**Strong, not applied yet ({len(nudge)})**\n" + _fmt(nudge[:10]) + more)
     return "\n\n".join(parts)
 
 
