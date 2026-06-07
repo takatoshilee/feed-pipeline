@@ -37,5 +37,9 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           DISCORD_ROLE_ID: ${{ secrets.DISCORD_ROLE_ID }}
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
           SEEN_PATH: .state/seen.json
-        run: python -m job_radar
+        run: |
+          set -o pipefail
+          python -m job_radar | tee run.log
+          { echo '```'; tail -3 run.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
