@@ -180,8 +180,69 @@ class ClaudeProvider:
         return _coerce_score(_extract_json(text))
 
 
+# --- Heuristic fallback (deterministic, no network) ---
+
+_EARLY = ("intern", "internship", "new grad", "new-grad", "new graduate", "co-op", "co op",
+          "coop", "junior", "early career", "early-career", "graduate", "entry level",
+          "entry-level", "student", "apprentice", "university")
+_SENIOR = ("senior", "sr.", "staff", "principal", " lead", "manager", "director", "head of",
+           "vp ", "architect", " ii", " iii", " iv", "distinguished", "expert", "10+")
+_CORE = ("software", "developer", "engineer", "swe", "backend", "back end", "back-end",
+         "frontend", "front end", "full stack", "full-stack", "machine learning", " ml",
+         " ai", "data", "platform", "infrastructure", " web")
+_TECH = ("python", "java", "javascript", "typescript", "react", "node", "golang", "rust",
+         "c++", "sql", "aws", "gcp", "azure", "docker", "kubernetes", "pytorch", "tensorflow",
+         "llm", "nlp", "api", "fastapi", "django", "flask", "next.js", "postgres", "spark")
+
+
+def heuristic_score(posting: Posting, profile: Profile) -> Score:
+    """Deterministic 0-100 fit estimate from title and skill signals, for when the LLM is
+    unavailable (rate-limited or no key). Lower precision than the LLM, but it keeps the
+    radar useful: a rules-survivor still gets a sensible, sortable score instead of nothing.
+    Marked ok=True (it's a real score) and tagged 'heuristic' so it's transparent."""
+    title = (posting.title or "").lower()
+    text = f"{title} {(posting.description or '')[:1500].lower()}"
+    # Baseline sits just under digest_threshold (50): a generic full-time rules-survivor
+    # lands ~45-53, while an early-career and/or techy role clears comfortably. This keeps
+    # a heuristic-scored backfill focused on intern/co-op/new-grad roles, not everything.
+    score = 40
+
+    if any(s in title for s in _SENIOR):
+        score -= 30
+    if any(e in title for e in _EARLY):
+        score += 28
+    if any(c in title for c in _CORE):
+        score += 8
+    score += min(12, sum(3 for t in _TECH if t in text))
+
+    score = max(0, min(100, score))
+    return Score(value=score, reason="heuristic (LLM unavailable): title + skill match",
+                 tags=["heuristic"], ok=True)
+
+
+class HeuristicProvider:
+    """Scores deterministically, no network. Used keyless and as the LLM fallback."""
+
+    async def score(self, posting: Posting, profile: Profile) -> Score:
+        return heuristic_score(posting, profile)
+
+
+class FallbackProvider:
+    """Try the primary (LLM) provider; if it errors (score.ok is False, e.g. a 429), fall
+    back to the deterministic heuristic so an LLM outage degrades to lower-precision
+    coverage instead of zero coverage."""
+
+    def __init__(self, primary, fallback):
+        self.primary = primary
+        self.fallback = fallback
+
+    async def score(self, posting: Posting, profile: Profile) -> Score:
+        s = await self.primary.score(posting, profile)
+        return s if s.ok else await self.fallback.score(posting, profile)
+
+
 class FakeProvider:
-    """Deterministic provider for tests and keyless local runs."""
+    """Constant-score provider for tests and keyless smoke runs."""
 
     def __init__(self, value: int = 70, reason: str = "fake", tags=None):
         self.value = value

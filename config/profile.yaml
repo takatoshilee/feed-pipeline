@@ -88,6 +88,9 @@ locations_allow:
 locations_block:
   - india
   - "united kingdom"
+  - uk          # token-aware: blocks "London, UK" but not "Ukraine"
+  - "u.k."
+  - england
   - ireland
   - germany
   - france

@@ -164,9 +164,12 @@ class FakeSink:
     def __init__(self):
         self.added = []
 
-    def add(self, posting, score):  # sync: the pipeline calls it via asyncio.to_thread
+    def add(self, posting, score):
         self.added.append(posting.uid)
         return True
+
+    def flush(self):  # batched write happens here; returns rows written
+        return len(self.added)
 
 
 async def test_pipeline_mirrors_matches_to_sheet(tmp_path, monkeypatch):
@@ -195,6 +198,9 @@ async def test_sheet_failure_does_not_abort_run(tmp_path, monkeypatch):
 
     class RaisingSink:
         def add(self, posting, score):
+            return True
+
+        def flush(self):
             raise RuntimeError("simulated Sheets 503")
 
     notifier = FakeNotifier()

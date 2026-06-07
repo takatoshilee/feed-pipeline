@@ -1,12 +1,13 @@
 import asyncio
 import os
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from .dedup import SeenStore
 from .filters import passes_rules
 from .models import Score, Urgency
 from .notify import ConsoleNotifier, DiscordNotifier
-from .scorer import ClaudeProvider, FakeProvider, GeminiProvider
+from .scorer import (ClaudeProvider, FallbackProvider, GeminiProvider, HeuristicProvider)
 from .sources import enrich_postings, fetch_all
 from .urgency import classify
 
@@ -51,11 +52,17 @@ async def _score_all(provider, survivors, profile):
 
 
 def build_provider(settings):
+    """No key -> deterministic heuristic. With a key -> the LLM, but wrapped so that a
+    scoring error (rate limit / outage) transparently falls back to the heuristic instead
+    of dropping the posting. The radar stays useful even when the LLM is unavailable."""
+    heuristic = HeuristicProvider()
     if not settings.llm_api_key:
-        return FakeProvider(value=70, reason="no LLM key; placeholder score")
+        return heuristic
     if settings.llm_provider == "claude":
-        return ClaudeProvider(settings.llm_api_key, settings.llm_model or "claude-haiku-4-5")
-    return GeminiProvider(settings.llm_api_key, settings.llm_model or "gemini-2.0-flash")
+        primary = ClaudeProvider(settings.llm_api_key, settings.llm_model or "claude-haiku-4-5")
+    else:
+        primary = GeminiProvider(settings.llm_api_key, settings.llm_model or "gemini-2.0-flash")
+    return FallbackProvider(primary, heuristic)
 
 
 def build_notifier(settings):
@@ -106,14 +113,19 @@ async def preview(config, *, provider=None, now=None):
     return stats
 
 
-async def backfill(config, *, provider=None, sheet_sink=None, now=None):
-    """One-time inventory load: rules-filter the CURRENT backlog, score the freshest
-    BACKFILL_CAP survivors, and write those worth tracking into the Sheet. Does NOT
-    touch the seen-set and does NOT ping Discord, so it can neither flood the channel
-    nor change what the live poll considers already-seen. SheetSink dedups, so running
-    it more than once is safe."""
+async def backfill(config, *, provider=None, sheet_sink=None, now=None,
+                   max_age_days=60, min_fit=60):
+    """One-time inventory load: rules-filter the CURRENT backlog (reaching back up to
+    max_age_days, wider than the cron's freshness window, to surface still-open older
+    roles), score the freshest BACKFILL_CAP survivors, and write those scoring >= min_fit
+    into the Sheet. min_fit is stricter than the cron's digest threshold so a bulk load
+    stays focused on strong matches instead of every rules-survivor. Does NOT touch the
+    seen-set and does NOT ping Discord. SheetSink dedups, so re-running is safe."""
     now = now or datetime.now(timezone.utc)
     profile, companies, settings = config.profile, config.companies, config.settings
+    # Reach further back than the live cron: still-open roles posted weeks ago are exactly
+    # what a backfill should catch (the cron only ever saw the last freshness_days window).
+    profile = replace(profile, freshness_days=max(profile.freshness_days, max_age_days))
     provider = provider or build_provider(settings)
     if sheet_sink is None:
         sheet_sink = build_sheet_sink(settings)
@@ -131,18 +143,17 @@ async def backfill(config, *, provider=None, sheet_sink=None, now=None):
     to_score = await enrich_postings(survivors[:BACKFILL_CAP], cmap)
     scored = await _score_all(provider, to_score, profile)
 
-    tracked = 0
     for p, score in scored:
-        if not score.ok:  # don't write bogus Fit 0 rows when scoring errored (e.g. 429)
-            continue
-        level = classify(p, score, cmap.get((p.ats, p.company)), profile, now)
-        if level is None:
-            continue
-        try:
-            if await asyncio.to_thread(sheet_sink.add, p, score):
-                tracked += 1
-        except Exception as e:
-            errors.append((p.company, f"sheet: {e!r}"))
+        # Inventory gate: a real score (not an error) at or above min_fit. Unlike the cron
+        # we don't apply the dream-tier bypass here, since a weak/unscored dream role isn't
+        # worth a row in a bulk load.
+        if score.ok and score.value >= min_fit:
+            sheet_sink.add(p, score)
+    try:
+        tracked = await asyncio.to_thread(sheet_sink.flush)  # one batched write
+    except Exception as e:
+        errors.append(("sheet", f"flush: {e!r}"))
+        tracked = 0
 
     score_errors = sum(1 for _, s in scored if not s.ok)
     stats = {"boards": len(companies), "postings": len(postings), "errors": len(errors),
@@ -191,22 +202,17 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
     scored = await _score_all(provider, survivors, profile)
 
     digest = []
-    pinged = tracked = 0
+    pinged = 0
     for p, score in scored:
         company = cmap.get((p.ats, p.company))
         level = classify(p, score, company, profile, now)
         if level is None:
             continue
-        # Mirror real-scored matches (incl. digest-level) into the Sheet so it's the
-        # full inventory to triage; Discord stays a heads-up for the urgent ones. Skip
-        # error scores (e.g. an LLM 429) so a dream-tier post never lands as a bogus
-        # Fit 0 row. A Sheet hiccup is recorded but can't abort the run.
+        # Queue real-scored matches (incl. digest-level) for the Sheet so it's the full
+        # inventory to triage; Discord stays a heads-up for the urgent ones. Skip error
+        # scores (e.g. an LLM 429) so a dream-tier post never lands as a bogus Fit 0 row.
         if sheet_sink is not None and score.ok:
-            try:
-                if await asyncio.to_thread(sheet_sink.add, p, score):
-                    tracked += 1
-            except Exception as e:
-                errors.append((p.company, f"sheet: {e!r}"))
+            sheet_sink.add(p, score)
         if level == Urgency.LOW:
             digest.append((p, score, company))
         else:
@@ -215,6 +221,15 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
                 pinged += 1
             except Exception as e:  # a webhook hiccup must not abort the run
                 errors.append((p.company, f"notify: {e!r}"))
+
+    # One batched write (the Sheets API caps per-row writes at ~60/min). A Sheets hiccup
+    # is recorded but can't abort the run.
+    tracked = 0
+    if sheet_sink is not None:
+        try:
+            tracked = await asyncio.to_thread(sheet_sink.flush)
+        except Exception as e:
+            errors.append(("sheet", f"flush: {e!r}"))
     try:
         await notifier.send_digest(digest, now)
     except Exception as e:
