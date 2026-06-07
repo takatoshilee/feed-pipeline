@@ -41,3 +41,12 @@ def test_freshness():
     assert not passes_rules(_p("Software Intern", posted=stale), PROFILE, NOW)
     # missing posted_at passes freshness (can't evaluate)
     assert passes_rules(_p("Software Intern", posted=None), PROFILE, NOW)
+
+
+def test_location_block_is_token_aware():
+    from job_radar.filters import _location_blocked
+    assert _location_blocked("india - remote", ["india"])                 # foreign-remote blocked
+    assert not _location_blocked("indianapolis, indiana", ["india"])      # NOT Indiana (US)
+    assert not _location_blocked("london, ontario", ["india", "germany"]) # London ON safe
+    assert _location_blocked("london, united kingdom", ["united kingdom"])  # phrase substring
+    assert not _location_blocked("remote", [])                            # empty list = no-op

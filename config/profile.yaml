@@ -94,9 +94,11 @@ locations_allow:
   - remote
   - "north america"
 
-# TODO (your call, see TUNING_RECOMMENDATIONS.md): block foreign-remote leaks like
-# "India - Remote" here. Naive substring blocking is risky ("india" matches "indiana"),
-# so it needs care; left empty pending your review.
+# To block foreign-remote leaks (e.g. "India - Remote"), add COUNTRY/REGION names here
+# (NOT city names like London -> would cut London, Ontario). The matcher is token-aware:
+# "india" blocks "India - Remote" but not "Indiana"; multi-word phrases ("united kingdom")
+# match as substrings. Empty = allow all (the US coverage above handles the common case).
+# Ready-to-paste list in TUNING_RECOMMENDATIONS.md.
 locations_block: []
 
 freshness_days: 21
