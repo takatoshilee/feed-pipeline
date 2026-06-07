@@ -10,6 +10,7 @@ from .sources import enrich_postings, fetch_all
 from .urgency import classify
 
 SCORE_CONCURRENCY = 6
+PREVIEW_CAP = 80   # max survivors to LLM-score in --preview (use --company/--limit to narrow)
 
 
 def _company_map(companies):
@@ -39,6 +40,34 @@ def build_notifier(settings):
     if settings.dry_run or not settings.webhook_url:
         return ConsoleNotifier()
     return DiscordNotifier(settings.webhook_url, settings.role_id)
+
+
+async def preview(config, *, provider=None, now=None):
+    """Show what the bot would surface from the CURRENT backlog: rules-filter all
+    postings, score (capped), and print ranked by fit. Read-only: ignores and never
+    writes the seen-set. For tuning profile.yaml before going live."""
+    now = now or datetime.now(timezone.utc)
+    profile, companies, settings = config.profile, config.companies, config.settings
+    provider = provider or build_provider(settings)
+    cmap = _company_map(companies)
+
+    postings, errors = await fetch_all(companies)
+    survivors = [p for p in postings if passes_rules(p, profile, now)]
+    to_score = survivors[:PREVIEW_CAP]
+    to_score = await enrich_postings(to_score, cmap)
+    scored = list(await _score_all(provider, to_score, profile))
+    scored.sort(key=lambda ps: ps[1].value, reverse=True)
+
+    for p, score in scored:
+        level = classify(p, score, cmap.get((p.ats, p.company)), profile, now)
+        tag = level.value.upper() if level else "drop"
+        print(f"[{tag:6}] {score.value:3}/100  {p.title}  @ {p.company} ({p.location})  :: {score.reason}")
+
+    stats = {"boards": len(companies), "postings": len(postings), "errors": len(errors),
+             "survivors": len(survivors), "scored": len(scored),
+             "truncated": max(0, len(survivors) - PREVIEW_CAP)}
+    print("job-radar PREVIEW:", stats)
+    return stats
 
 
 async def run(config, *, provider=None, notifier=None, now=None, force_prime=False):
