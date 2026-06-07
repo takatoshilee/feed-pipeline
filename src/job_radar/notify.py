@@ -21,9 +21,8 @@ def _age(posting: Posting, now: datetime) -> str:
 def build_embed(posting: Posting, score: Score, urgency: Urgency,
                 company: Company | None, now: datetime) -> dict:
     tier = company.tier if company else "target"
-    return {
+    embed = {
         "title": (posting.title or "(untitled)")[:240],
-        "url": posting.url,
         "color": COLORS[urgency],
         "fields": [
             {"name": "Company", "value": f"{posting.company} ({posting.ats})", "inline": True},
@@ -33,6 +32,9 @@ def build_embed(posting: Posting, score: Score, urgency: Urgency,
         ],
         "footer": {"text": (", ".join(score.tags) or tier)[:200]},
     }
+    if posting.url:  # Discord 400s on an empty/invalid embed url; only set when present
+        embed["url"] = posting.url
+    return embed
 
 
 class DiscordNotifier:
@@ -59,9 +61,14 @@ class DiscordNotifier:
     async def send_digest(self, items, now) -> None:
         if not items:
             return
-        lines = [f"- [{p.title}]({p.url}) — {p.company} ({s.value}/100)" for (p, s, c) in items[:25]]
+        lines = []
+        for (p, s, c) in items[:25]:
+            label = f"[{p.title}]({p.url})" if p.url else p.title
+            lines.append(f"- {label} | {p.company} ({s.value}/100)")
+        if len(items) > 25:
+            lines.append(f"...and {len(items) - 25} more")
         await self._post({"embeds": [{
-            "title": f"Daily digest — {len(items)} lower-priority matches",
+            "title": f"Daily digest: {len(items)} lower-priority matches",
             "description": "\n".join(lines)[:4000],
             "color": COLORS[Urgency.LOW],
         }]})

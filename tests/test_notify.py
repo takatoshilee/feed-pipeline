@@ -44,3 +44,23 @@ async def test_console_notifier_runs(capsys):
     await n.send_digest([(_p(), Score(55, "r"), COMPANY)], NOW)
     out = capsys.readouterr().out
     assert "ML Intern" in out
+
+
+def test_build_embed_omits_empty_url():
+    p = Posting(uid="x:1", ats="ashby", company="c", title="t", location="l",
+                url="", posted_at=NOW, description="d")  # ATS omitted the url
+    e = build_embed(p, Score(80, "r"), Urgency.MEDIUM, COMPANY, NOW)
+    assert "url" not in e  # Discord 400s on an empty embed url
+
+
+async def test_digest_shows_overflow_count():
+    sent = {}
+
+    def handler(request):
+        sent["body"] = request.read().decode()
+        return httpx.Response(204)
+
+    items = [(_p(), Score(55, "r"), COMPANY) for _ in range(30)]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await DiscordNotifier("https://hook", client=client).send_digest(items, NOW)
+    assert "and 5 more" in sent["body"]  # 30 items: 25 listed + overflow line

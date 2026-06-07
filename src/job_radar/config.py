@@ -48,7 +48,7 @@ def load_companies(path: str) -> list[Company]:
     out = []
     for c in d.get("companies", []):
         out.append(Company(
-            slug=c["slug"], ats=c["ats"], tier=c.get("tier", "target"),
+            slug=c["slug"], ats=str(c["ats"]).lower(), tier=str(c.get("tier", "target")).lower(),
             wd_host=c.get("wd_host"), wd_site=c.get("wd_site"),
         ))
     return out

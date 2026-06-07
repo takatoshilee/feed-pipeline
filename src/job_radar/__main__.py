@@ -38,7 +38,7 @@ def main(argv=None):
     companies = config.companies
     if args.company:
         companies = [c for c in companies if c.slug == args.company]
-    if args.limit:
+    if args.limit is not None:
         companies = companies[:args.limit]
 
     config = replace(config, companies=companies, settings=settings)

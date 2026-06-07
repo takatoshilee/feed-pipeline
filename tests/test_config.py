@@ -29,6 +29,14 @@ def test_load_companies(tmp_path):
     assert companies[0].slug == "stripe" and companies[0].ats == "greenhouse"
 
 
+def test_load_companies_lowercases_ats_and_tier(tmp_path):
+    f = tmp_path / "c.yaml"
+    f.write_text("companies:\n  - {slug: ACME, ats: Greenhouse, tier: Dream}\n")
+    companies = load_companies(str(f))
+    assert companies[0].ats == "greenhouse"   # matches ADAPTERS keys
+    assert companies[0].tier == "dream"       # matches the dream-override check
+
+
 def test_load_settings_dry_run_when_no_webhook(monkeypatch):
     monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
     monkeypatch.delenv("DRY_RUN", raising=False)
