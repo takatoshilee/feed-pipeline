@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import replace
 
 from .config import load_config
-from .pipeline import preview, run
+from .pipeline import backfill, preview, run
 
 
 def _parse_args(argv=None):
@@ -20,6 +20,8 @@ def _parse_args(argv=None):
                     help="mark everything seen without notifying (re-prime the radar)")
     ap.add_argument("--preview", action="store_true",
                     help="show what would surface from the current backlog, ranked; read-only")
+    ap.add_argument("--backfill", action="store_true",
+                    help="one-time: write current open matches to the Sheet (no pings, no state change)")
     ap.add_argument("--limit", type=int, help="only poll the first N companies (local testing)")
     ap.add_argument("--company", help="only poll this company slug (local testing)")
     return ap.parse_args(argv)
@@ -44,6 +46,8 @@ def main(argv=None):
     config = replace(config, companies=companies, settings=settings)
     if args.preview:
         asyncio.run(preview(config))
+    elif args.backfill:
+        asyncio.run(backfill(config))
     else:
         asyncio.run(run(config, force_prime=args.prime))
 
