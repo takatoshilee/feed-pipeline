@@ -17,30 +17,30 @@ def test_build_message_none_when_nothing_pending():
     assert build_message(rows, TODAY) is None
 
 
-def test_build_message_flags_due_and_strong():
+def test_build_message_flags_due_and_top_pending():
     rows = [
         _row("due", 60, deadline="2026-06-09"),                 # deadline in 2 days -> due soon
-        _row("strong", 88, posted="2026-06-01"),               # fit 88, 6 days old -> nudge
-        _row("fresh", 95, posted="2026-06-07"),                # too fresh to nag (today)
-        _row("applied", 99, status="Applied", deadline="2026-06-08"),  # ignored
+        _row("strong", 88, posted="2026-06-01"),               # high fit -> top pending
+        _row("applied", 99, status="Applied", deadline="2026-06-08"),  # applied -> excluded
     ]
     msg = build_message(rows, TODAY)
     assert "Due soon" in msg and "Role due" in msg
-    assert "Strong, not applied yet (1)" in msg and "Role strong" in msg
-    assert "Role fresh" not in msg and "Role applied" not in msg
+    assert "Top pending right now" in msg and "Role strong" in msg
+    assert "Role applied" not in msg            # applied rows never resurface
 
 
-def test_build_message_leads_with_must_apply_and_catchup_header():
+def test_build_message_includes_link_and_catchup_header():
     rows = [
         _row("must", 55, priority="must"),                     # flagged -> must-apply, any fit
-        _row("strong", 90, posted="2026-06-01"),               # strong nudge
+        _row("a", 90),
         _row("done", 70, status="Applied", applied_on="2026-06-02"),  # sets last-active
     ]
-    msg = build_message(rows, TODAY)
+    msg = build_message(rows, TODAY, sheet_url="https://sheet/x")
     assert "Must apply (your priority)" in msg and "Role must" in msg
     assert "last applied 5d ago" in msg          # TODAY - 2026-06-02 = 5 days
-    # must-apply section comes before the strong-but-unapplied section
-    assert msg.index("Must apply") < msg.index("Strong, not applied")
+    assert "[Open your tracker →](https://sheet/x)" in msg
+    # must-apply section comes before the general top-pending list
+    assert msg.index("Must apply") < msg.index("Top pending")
 
 
 class FakeWS:
