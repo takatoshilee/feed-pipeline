@@ -1,7 +1,8 @@
 from datetime import date
 
 from job_radar.tracker import (due_soon, unapplied_strong, top_unapplied, stats, parse_date,
-                              priority_rank, has_priority, must_apply, pending_count, last_active)
+                              priority_rank, has_priority, must_apply, pending_count, last_active,
+                              recently_posted)
 
 TODAY = date(2026, 6, 10)
 
@@ -72,6 +73,18 @@ def test_must_apply_only_flagged_pending_sorted_by_priority_then_fit():
         row(uid="e", Priority="low", Fit="99"),                # not flagged -> excluded
     ]
     assert [r["uid"] for r in must_apply(rows)] == ["b", "c", "a"]
+
+
+def test_recently_posted_only_fresh_pending_newest_first():
+    rows = [
+        row(uid="a", Posted="2026-06-09"),                       # 1 day ago -> fresh
+        row(uid="b", Posted="2026-06-04"),                       # 6 days ago -> fresh
+        row(uid="c", Posted="2026-05-20"),                       # 21 days -> too old
+        row(uid="d", Posted="2026-06-08", Status="Applied"),     # fresh but applied -> excluded
+        row(uid="e", Posted=""),                                 # unknown date -> skipped
+    ]
+    res = recently_posted(rows, TODAY, within_days=7)
+    assert [r["uid"] for r in res] == ["a", "b"]   # newest first, only fresh + pending
 
 
 def test_pending_count_and_last_active():

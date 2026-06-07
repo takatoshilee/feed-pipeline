@@ -33,11 +33,13 @@ def build_message(records, today: date, sheet_url: str | None = None) -> str | N
 
     parts = []
     pending = tracker.pending_count(records)
+    fresh = len(tracker.recently_posted(records, today, within_days=7))
     la = tracker.last_active(records)
+    fresh_bit = f" · {fresh} new this week" if fresh else ""
     if la is not None:
-        parts.append(f"_{pending} pending · last applied {(today - la).days}d ago_")
+        parts.append(f"_{pending} pending{fresh_bit} · last applied {(today - la).days}d ago_")
     elif pending:
-        parts.append(f"_{pending} pending · nothing applied yet_")
+        parts.append(f"_{pending} pending{fresh_bit} · nothing applied yet_")
 
     if must:
         parts.append("**Must apply (your priority)**\n" + _fmt(must[:10]))
