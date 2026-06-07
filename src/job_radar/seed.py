@@ -19,17 +19,21 @@ def parse_line(line: str) -> dict | None:
     line = line.strip()
     if not line or line.startswith("#"):
         return None
-    parts = [p.strip() for p in line.replace("\t", ",").split(",") if p.strip()]
-    if len(parts) < 2:
+    # Keep field positions (do NOT drop empties) so an empty column never shifts later
+    # ones; only trim trailing empties from a stray trailing comma.
+    parts = [p.strip() for p in line.replace("\t", ",").split(",")]
+    while len(parts) > 2 and parts[-1] == "":
+        parts.pop()
+    if len(parts) < 2 or not parts[0] or not parts[1]:
         return None
     slug, ats = parts[0], parts[1].lower()
     if ats not in VALID_ATS:
         return None
-    tier = parts[2].lower() if len(parts) > 2 else "target"
+    tier = parts[2].lower() if len(parts) > 2 and parts[2] else "target"
     rec = {"slug": slug, "ats": ats, "tier": tier}
     if ats == "workday":
-        if len(parts) < 5:
-            return None  # workday needs wd_host + wd_site
+        if len(parts) < 5 or not parts[3] or not parts[4]:
+            return None  # workday needs non-empty wd_host + wd_site
         rec["wd_host"], rec["wd_site"] = parts[3], parts[4]
     return rec
 

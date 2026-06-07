@@ -66,7 +66,7 @@ def load_settings() -> Settings:
         webhook_url=webhook,
         llm_api_key=key,
         llm_model=os.environ.get("LLM_MODEL", ""),
-        llm_provider=os.environ.get("LLM_PROVIDER", "gemini").lower(),
+        llm_provider=(os.environ.get("LLM_PROVIDER") or "gemini").lower(),
         role_id=os.environ.get("DISCORD_ROLE_ID") or None,
         seen_path=os.environ.get("SEEN_PATH", ".state/seen.json"),
         dry_run=dry,

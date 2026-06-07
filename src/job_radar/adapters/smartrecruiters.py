@@ -17,9 +17,12 @@ def _location(loc: dict) -> str:
 
 def parse(slug: str, payload: dict) -> list[Posting]:
     out = []
-    for j in payload.get("content", []):
+    for j in payload.get("content") or []:   # null-safe
+        jid = j.get("id")
+        if jid is None:
+            continue
         out.append(Posting(
-            uid=f"smartrecruiters:{slug}:{j['id']}",
+            uid=f"smartrecruiters:{slug}:{jid}",
             ats="smartrecruiters",
             company=slug,
             title=j.get("name", "") or "",

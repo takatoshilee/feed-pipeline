@@ -22,6 +22,17 @@ def test_parse_normalizes_postings():
     assert "Build things" in p.description  # html stripped + unescaped
 
 
+def test_parse_null_safe_and_skips_missing_id():
+    assert greenhouse.parse("x", {"jobs": None}) == []   # {"jobs": null} on an empty board
+    assert greenhouse.parse("x", {}) == []
+    postings = greenhouse.parse("x", {"jobs": [
+        {"title": "no id"},  # malformed entry -> skipped, not a crash
+        {"id": 5, "title": "ok", "location": {"name": "T"},
+         "absolute_url": "u", "updated_at": "2026-06-01T00:00:00Z", "content": "c"},
+    ]})
+    assert len(postings) == 1 and postings[0].uid == "greenhouse:x:5"
+
+
 async def test_fetch_uses_client():
     def handler(request):
         assert "boards-api.greenhouse.io/v1/boards/stripe/jobs" in str(request.url)
