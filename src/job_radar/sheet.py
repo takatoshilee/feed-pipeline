@@ -23,10 +23,18 @@ def connect(creds_path: str, sheet_id: str):
 
 
 def ensure_headers(ws) -> None:
-    if ws.row_values(1) != HEADERS:
-        if not ws.row_values(1):
-            ws.append_row(HEADERS)
-        # If the header row exists but differs, leave it (Taka may have customized).
+    """Make row 1 the expected header. Already correct -> nothing. Empty -> write it.
+    Wrong but with no data beneath (e.g. a stray value pasted into A1) -> overwrite it.
+    Wrong but with data already under it -> leave alone, to avoid shifting columns."""
+    current = ws.row_values(1)
+    if current == HEADERS:
+        return
+    if not current:
+        ws.append_row(HEADERS)
+        return
+    if len(ws.col_values(1)) <= 1:  # row 1 holds something, but no data rows follow
+        for i, h in enumerate(HEADERS, start=1):
+            ws.update_cell(1, i, h)
 
 
 def existing_uids(ws) -> set:
@@ -67,3 +75,22 @@ def set_deadline(ws, uid: str, deadline: str) -> bool:
 
 def all_records(ws) -> list:
     return ws.get_all_records()
+
+
+class SheetSink:
+    """Mirrors new matches into the tracker Sheet during a poll. Snapshots the
+    existing uids once at construction, so a single run never re-adds a row that
+    is already there (and repeated uids within the run are added only once)."""
+
+    def __init__(self, ws):
+        self.ws = ws
+        self._seen = existing_uids(ws)
+
+    def add(self, posting: Posting, score: Score) -> bool:
+        """Append the posting as a new 'New' row. Returns False (no-op) if its uid
+        is already in the Sheet."""
+        if posting.uid in self._seen:
+            return False
+        append_match(self.ws, posting, score)
+        self._seen.add(posting.uid)
+        return True

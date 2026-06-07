@@ -69,28 +69,40 @@ request to `/wday/cxs/<tenant>/<site>/jobs`. The host is the `wdN` part
 5. Trigger once via the Actions tab (confirm a `PRIMED` run — the first run primes
    silently so you aren't flooded), then the ~15-min cron takes over.
 
-## v2: interactive tracker bot
+## Tracker (Google Sheet + reminders, no server)
 
-An always-on bot that tracks applications in a Google Sheet, pings Discord with
-**Applied / Not for me** buttons, answers slash commands, and sends daily reminders.
-Design: `docs/superpowers/specs/2026-06-07-tracker-bot-design.md`.
+The cron doubles as an application tracker. When the Sheet secrets are present, each
+poll mirrors every match into a Google Sheet (one `New` row per job), and a second
+**daily** workflow (`remind.yml`) reads the Sheet and pings Discord about deadlines
+coming up and strong roles still unapplied. You triage in the Sheet — set `Priority`,
+fill `Deadline`, mark `Status` Applied/Skip — and the reminders stop nagging once a
+row is no longer `New`. No always-on process: it all rides the free Actions cron.
+
+Two extra Action secrets turn it on (the poll skips the Sheet cleanly if they're absent):
+- `GOOGLE_SHEET_ID` — from the Sheet URL, the part between `/d/` and `/edit`.
+- `GOOGLE_CREDENTIALS` — the full service-account JSON key (paste the file contents).
+
+Google setup: enable the Sheets API, create a **service account**, download its JSON
+key, and share the Sheet with the service-account email (Editor). The Sheet's columns
+are created automatically on first write. Locally you can preview reminders with
+`GOOGLE_SHEET_ID=... GOOGLE_CREDENTIALS_PATH=google-creds.json python -m job_radar.remind`.
+
+## Optional: always-on interactive bot
+
+If you'd rather press **Applied / Not for me** buttons and use slash commands
+(`/pending` `/top` `/due` `/stats`) instead of editing the Sheet, run the bot as a
+persistent process (a VM or a machine that stays on). Same Sheet, plus Discord
+buttons. Design: `docs/superpowers/specs/2026-06-07-tracker-bot-design.md`.
 
 ```bash
 pip install -e ".[bot]"
-python -m job_radar.bot
+python -m job_radar.bot          # or: python -m job_radar.bot --check  (test the Sheet only)
 ```
 
-One-time setup, then put the values in a git-ignored `.env`:
-```
-DISCORD_BOT_TOKEN=...        # Discord Developer Portal -> your app -> Bot
-DISCORD_CHANNEL_ID=...       # right-click #channel -> Copy Channel ID (Developer Mode on)
-GOOGLE_SHEET_ID=...          # from the Sheet URL between /d/ and /edit
-GOOGLE_CREDENTIALS_PATH=google-creds.json   # service-account JSON key
-LLM_API_KEY=...              # same Gemini key as v1
-```
-- Discord bot invite scopes: `bot` + `applications.commands`; permissions: Send Messages + Embed Links (Guild Install).
-- Google: enable the Sheets API, make a **service account**, download its JSON key, and share the Sheet with the service-account email (Editor).
-- Slash commands: `/pending` `/top` `/due` `/stats`. The Sheet is the source of truth (edit it directly too). First run primes silently.
+Put the values in a git-ignored `.env`: `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID`,
+`GOOGLE_SHEET_ID`, `GOOGLE_CREDENTIALS_PATH=google-creds.json`, `LLM_API_KEY`.
+Bot invite scopes: `bot` + `applications.commands`; permissions: Send Messages +
+Embed Links (Guild Install).
 
 ## How it works
 

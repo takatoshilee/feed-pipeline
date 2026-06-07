@@ -31,7 +31,21 @@ jobs:
           restore-keys: |
             seen-
 
-      - run: pip install -e .
+      - run: pip install -e ".[sheet]"
+
+      # Materialize the service-account key (if the secret is set) so the poll can
+      # mirror matches into the Google Sheet. No secret => the file is absent and the
+      # Sheet is silently skipped; Discord pings still work.
+      - name: Write Google credentials
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          if [ -n "$GOOGLE_CREDENTIALS" ]; then
+            printf '%s' "$GOOGLE_CREDENTIALS" > google-creds.json
+            echo "wrote google-creds.json"
+          else
+            echo "no GOOGLE_CREDENTIALS secret; Sheet mirroring disabled"
+          fi
 
       - name: Run radar
         env:
@@ -40,6 +54,8 @@ jobs:
           DISCORD_ROLE_ID: ${{ secrets.DISCORD_ROLE_ID }}
           LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
           SEEN_PATH: .state/seen.json
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_CREDENTIALS_PATH: google-creds.json
         run: |
           set -o pipefail
           python -m job_radar | tee run.log
