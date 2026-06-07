@@ -61,7 +61,7 @@ def build_provider(settings):
     if settings.llm_provider == "claude":
         primary = ClaudeProvider(settings.llm_api_key, settings.llm_model or "claude-haiku-4-5")
     else:
-        primary = GeminiProvider(settings.llm_api_key, settings.llm_model or "gemini-2.0-flash")
+        primary = GeminiProvider(settings.llm_api_key, settings.llm_model or "gemini-2.5-flash")
     return FallbackProvider(primary, heuristic)
 
 
