@@ -8,7 +8,7 @@ from .filters import passes_rules
 from .models import Score, Urgency
 from .notify import ConsoleNotifier, DiscordNotifier
 from .scorer import (BedrockProvider, ClaudeProvider, FallbackProvider, GeminiProvider,
-                     HeuristicProvider)
+                     HeuristicProvider, heuristic_score)
 from .sources import enrich_postings, fetch_all
 from .urgency import classify
 
@@ -146,9 +146,11 @@ async def backfill(config, *, provider=None, sheet_sink=None, now=None,
     # Skip roles already in the Sheet BEFORE scoring, so a re-run only spends LLM calls on
     # genuinely-new postings (e.g. after widening the filter to US roles).
     survivors = [p for p in survivors if not sheet_sink.is_tracked(p.uid)]
-    # Freshest first, so a capped backfill captures the most relevant current openings.
-    survivors.sort(key=lambda p: p.posted_at or datetime.min.replace(tzinfo=timezone.utc),
-                   reverse=True)
+    # Pre-rank by the FREE heuristic (rewards early-career + skill match, penalizes
+    # seniority/domain-mismatch) and LLM-score the top BACKFILL_CAP. Across a big, loose
+    # pool (e.g. US roles) this beats freshest-first, which surfaces marginal sales/support
+    # roles that pass the title rules but aren't a fit.
+    survivors.sort(key=lambda p: heuristic_score(p, profile).value, reverse=True)
     to_score = await enrich_postings(survivors[:BACKFILL_CAP], cmap)
     scored = await _score_all(provider, to_score, profile)
 
