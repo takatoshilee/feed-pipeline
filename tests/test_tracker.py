@@ -1,6 +1,7 @@
 from datetime import date
 
-from job_radar.tracker import due_soon, unapplied_strong, top_unapplied, stats, parse_date
+from job_radar.tracker import (due_soon, unapplied_strong, top_unapplied, stats, parse_date,
+                              priority_rank, has_priority, must_apply, pending_count, last_active)
 
 TODAY = date(2026, 6, 10)
 
@@ -51,3 +52,34 @@ def test_stats_counts_by_status():
     rows = [row(Fit="90"), row(Status="Applied"), row(Status="Applied"), row()]
     s = stats(rows)
     assert s["New"] == 2 and s["Applied"] == 2
+
+
+def test_priority_rank_and_has_priority():
+    assert priority_rank(row(Priority="must")) == 0
+    assert priority_rank(row(Priority="High")) == 1   # case-insensitive
+    assert priority_rank(row(Priority="2")) == 2
+    assert priority_rank(row(Priority="")) == 9        # blank sorts last
+    assert priority_rank(row(Priority="banana")) == 9  # unknown sorts last
+    assert has_priority(row(Priority="urgent")) and not has_priority(row(Priority="low"))
+
+
+def test_must_apply_only_flagged_pending_sorted_by_priority_then_fit():
+    rows = [
+        row(uid="a", Priority="high", Fit="70"),
+        row(uid="b", Priority="must", Fit="60"),               # must outranks high
+        row(uid="c", Priority="high", Fit="90"),               # higher fit within 'high'
+        row(uid="d", Priority="must", Fit="80", Status="Applied"),  # applied -> excluded
+        row(uid="e", Priority="low", Fit="99"),                # not flagged -> excluded
+    ]
+    assert [r["uid"] for r in must_apply(rows)] == ["b", "c", "a"]
+
+
+def test_pending_count_and_last_active():
+    rows = [
+        row(uid="a"),
+        row(uid="b", Status="Applied", **{"Applied on": "2026-06-05"}),
+        row(uid="c", Status="Applied", **{"Applied on": "2026-06-08"}),
+    ]
+    assert pending_count(rows) == 1
+    assert last_active(rows) == date(2026, 6, 8)   # most recent applied-on
+    assert last_active([row(uid="x")]) is None     # nothing applied yet

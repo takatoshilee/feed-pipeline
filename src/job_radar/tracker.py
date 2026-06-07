@@ -80,3 +80,42 @@ def stats(rows) -> dict:
     for r in rows:
         counts[status(r)] = counts.get(status(r), 0) + 1
     return counts
+
+
+# Priority labels Taka can type in the Sheet's Priority column, most urgent -> least.
+_PRIORITY = {
+    "must": 0, "urgent": 0, "p0": 0, "asap": 0,
+    "high": 1, "p1": 1, "1": 1, "h": 1,
+    "medium": 2, "med": 2, "p2": 2, "2": 2, "m": 2,
+    "low": 3, "p3": 3, "3": 3, "l": 3,
+}
+
+
+def priority_rank(row) -> int:
+    """Lower = more urgent. Unrecognized or blank Priority sorts last (9)."""
+    return _PRIORITY.get((row.get("Priority") or "").strip().lower(), 9)
+
+
+def has_priority(row) -> bool:
+    """True if Taka flagged this must/urgent/high (the 'apply no matter what' set)."""
+    return priority_rank(row) <= 1
+
+
+def must_apply(rows):
+    """Pending rows flagged high priority, most-urgent then best-fit first. These should
+    surface in reminders regardless of fit or age (Taka decided they matter)."""
+    out = [r for r in rows if status(r) == PENDING and has_priority(r)]
+    out.sort(key=lambda r: (priority_rank(r), -fit(r)))
+    return out
+
+
+def pending_count(rows) -> int:
+    return sum(1 for r in rows if status(r) == PENDING)
+
+
+def last_active(rows):
+    """Most recent 'Applied on' date across the sheet, or None. A proxy for when Taka
+    last triaged, used to frame the catch-up nudge after a busy stretch."""
+    dates = [parse_date(r.get("Applied on")) for r in rows]
+    dates = [d for d in dates if d is not None]
+    return max(dates) if dates else None
