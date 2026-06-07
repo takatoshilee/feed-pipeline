@@ -6,8 +6,9 @@ profile, and pings a Discord channel with color-coded, urgency-tagged embeds.
 Runs free on GitHub Actions cron. Polling the ATS APIs directly means new reqs
 are seen within minutes of going live, **upstream of LinkedIn/Indeed aggregators**.
 
-Currently watching **~76 live boards** (incl. RBC/CIBC/BMO/Sun Life/TD campus
-boards for Canadian co-op recruiting). Grow the list freely; dead slugs are skipped.
+Currently watching **200+ live boards** (incl. RBC/CIBC/BMO/Sun Life/TD early-talent
+boards for Canadian co-op recruiting, plus big tech, fintech, and AI/dev-tool startups).
+Grow the list freely with `seed` + `validate`; dead slugs are skipped.
 
 ## Quick start (local, no secrets needed)
 
