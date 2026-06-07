@@ -64,3 +64,15 @@ async def test_digest_shows_overflow_count():
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         await DiscordNotifier("https://hook", client=client).send_digest(items, NOW)
     assert "and 5 more" in sent["body"]  # 30 items: 25 listed + overflow line
+
+
+async def test_send_embed_posts_title_and_body():
+    sent = {}
+
+    def handler(request):
+        sent["body"] = request.read().decode()
+        return httpx.Response(204)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await DiscordNotifier("https://hook", client=client).send_embed("Reminders", "Due soon: X")
+    assert "Reminders" in sent["body"] and "Due soon: X" in sent["body"]

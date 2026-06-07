@@ -73,6 +73,11 @@ class DiscordNotifier:
             "color": COLORS[Urgency.LOW],
         }]})
 
+    async def send_embed(self, title: str, description: str, color: int = 0xE67E22) -> None:
+        """Post a plain title/body embed (used by the daily reminder pass)."""
+        await self._post({"embeds": [{"title": title[:240],
+                                      "description": description[:4000], "color": color}]})
+
 
 class ConsoleNotifier:
     """Used in dry-run / local. Prints instead of posting."""
@@ -87,3 +92,6 @@ class ConsoleNotifier:
         print(f"[DIGEST] {len(items)} lower-priority matches")
         for (p, s, c) in items:
             print(f"   - {p.title} @ {p.company} ({s.value}/100) {p.url}")
+
+    async def send_embed(self, title: str, description: str, color: int = 0xE67E22) -> None:
+        print(f"[{title}]\n{description}")

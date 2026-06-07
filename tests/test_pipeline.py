@@ -156,3 +156,48 @@ async def test_intra_run_uid_dedup_pings_once(tmp_path, monkeypatch):
     notifier = FakeNotifier()
     await pipeline.run(config, provider=FakeProvider(value=90), notifier=notifier, now=NOW)
     assert len(notifier.ones) == 1  # deduped -> pinged once, not twice
+
+
+class FakeSink:
+    def __init__(self):
+        self.added = []
+
+    def add(self, posting, score):  # sync: the pipeline calls it via asyncio.to_thread
+        self.added.append(posting.uid)
+        return True
+
+
+async def test_pipeline_mirrors_matches_to_sheet(tmp_path, monkeypatch):
+    async def fake_fetch_all(companies, **kw):
+        return _postings(), []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    config = _config(tmp_path)
+    _prime_seen(config)
+
+    sink = FakeSink()
+    stats = await pipeline.run(config, provider=FakeProvider(value=90, reason="r"),
+                               notifier=FakeNotifier(), sheet_sink=sink, now=NOW)
+
+    assert sink.added == ["greenhouse:c:1"]  # the intern is mirrored; the senior was rules-filtered
+    assert stats["tracked"] == 1
+
+
+async def test_sheet_failure_does_not_abort_run(tmp_path, monkeypatch):
+    async def fake_fetch_all(companies, **kw):
+        return _postings(), []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    config = _config(tmp_path)
+    _prime_seen(config)
+
+    class RaisingSink:
+        def add(self, posting, score):
+            raise RuntimeError("simulated Sheets 503")
+
+    notifier = FakeNotifier()
+    stats = await pipeline.run(config, provider=FakeProvider(value=90), notifier=notifier,
+                               sheet_sink=RaisingSink(), now=NOW)
+    assert stats["errors"] >= 1
+    assert len(notifier.ones) == 1   # the Discord ping still fired despite the Sheet error
+    assert stats["tracked"] == 0

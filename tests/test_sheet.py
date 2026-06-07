@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from job_radar.models import Posting, Score
 from job_radar.sheet import (HEADERS, ensure_headers, append_match, set_status,
-                             set_deadline, existing_uids, all_records)
+                             set_deadline, existing_uids, all_records, SheetSink)
 
 
 class FakeWS:
@@ -67,3 +67,31 @@ def test_ensure_headers_idempotent():
     ws = FakeWS([HEADERS])
     ensure_headers(ws)
     assert len(ws.rows) == 1  # didn't duplicate the header
+
+
+def test_ensure_headers_overwrites_stray_a1():
+    ws = FakeWS([["Discord Developer Portal"]])  # junk pasted into A1, no data beneath
+    ensure_headers(ws)
+    assert ws.rows[0] == HEADERS
+    assert len(ws.rows) == 1
+
+
+def test_ensure_headers_leaves_populated_custom_header():
+    ws = FakeWS([["my", "own", "header"], ["a", "b", "c"]])  # real data under a custom header
+    ensure_headers(ws)
+    assert ws.rows[0] == ["my", "own", "header"]  # not clobbered
+
+
+def test_sheet_sink_dedups_against_existing_and_within_run():
+    ws = FakeWS([HEADERS])
+    append_match(ws, _posting(), Score(70, "old"))  # already in the sheet from a prior run
+    sink = SheetSink(ws)
+
+    assert sink.add(_posting(), Score(88, "again")) is False  # uid already present -> no-op
+    assert len(ws.rows) == 2  # header + the one pre-existing row, nothing added
+
+    fresh = Posting(uid="lever:cohere:9", ats="lever", company="Cohere", title="ML Intern",
+                    location="Remote", url="http://y", posted_at=None, description="d")
+    assert sink.add(fresh, Score(91, "new")) is True
+    assert sink.add(fresh, Score(91, "dup")) is False  # same uid twice in one run -> once
+    assert existing_uids(ws) == {"greenhouse:stripe:1", "lever:cohere:9"}

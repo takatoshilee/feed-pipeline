@@ -15,6 +15,8 @@ class Settings:
     role_id: str | None
     seen_path: str
     dry_run: bool
+    sheet_id: str | None = None    # Google Sheet to mirror matches into (None => off)
+    creds_path: str | None = None  # service-account JSON for that Sheet
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,8 @@ def load_settings() -> Settings:
         role_id=os.environ.get("DISCORD_ROLE_ID") or None,
         seen_path=os.environ.get("SEEN_PATH", ".state/seen.json"),
         dry_run=dry,
+        sheet_id=os.environ.get("GOOGLE_SHEET_ID") or None,
+        creds_path=os.environ.get("GOOGLE_CREDENTIALS_PATH") or None,
     )
 
 
