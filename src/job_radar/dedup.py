@@ -36,8 +36,10 @@ class SeenStore:
         return posting.uid not in self._seen
 
     def mark(self, posting: Posting, now: datetime | None = None) -> None:
+        # Store last-seen (overwrite, not setdefault): re-observing a still-listed
+        # posting refreshes its timestamp so it never ages out of the store while live.
         now = now or datetime.now(timezone.utc)
-        self._seen.setdefault(posting.uid, now.isoformat())
+        self._seen[posting.uid] = now.isoformat()
 
     def save(self, keep_days: int = 60, now: datetime | None = None) -> None:
         now = now or datetime.now(timezone.utc)
