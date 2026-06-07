@@ -1,0 +1,33 @@
+# AI / dev-tools batch (best profile match). validate --prune cleans dead slugs.
+# Ashby
+harvey,ashby,target
+hebbia,ashby,target
+dust,ashby,target
+deepgram,ashby,target
+assemblyai,ashby,target
+pinecone,ashby,target
+weaviate,ashby,target
+replit,ashby,target
+supabase,ashby,target
+neon,ashby,target
+railway,ashby,target
+hightouch,ashby,target
+dagster,ashby,target
+prefect,ashby,target
+huggingface,ashby,target
+cresta,ashby,target
+ironclad,ashby,target
+ramp,ashby,target
+notion,ashby,target
+# Greenhouse
+lattice,greenhouse,target
+gong,greenhouse,target
+grammarly,greenhouse,target
+klaviyo,greenhouse,target
+toast,greenhouse,target
+squarespace,greenhouse,target
+etsy,greenhouse,target
+coursera,greenhouse,target
+nubank,greenhouse,target
+verkada,greenhouse,target
+ironcladhq,greenhouse,target
