@@ -31,8 +31,19 @@ def build_prompt(posting: Posting, profile: Profile) -> str:
     return f"{INSTRUCTIONS}\n\n{_candidate_block(profile)}\n\n{_posting_block(posting)}\n"
 
 
+def _as_dict(obj) -> dict:
+    """Normalize a parsed JSON value to a dict. LLMs sometimes wrap the object in a
+    single-element array or return a bare scalar; anything non-dict-shaped -> {}."""
+    if isinstance(obj, dict):
+        return obj
+    if isinstance(obj, list) and obj and isinstance(obj[0], dict):
+        return obj[0]
+    return {}
+
+
 def _extract_json(text: str) -> dict:
-    """Parse a JSON object out of an LLM text response, tolerating ``` fences."""
+    """Parse a JSON object out of an LLM text response, tolerating ``` fences.
+    Always returns a dict (never a list/scalar), so callers can safely .get()."""
     t = (text or "").strip()
     if t.startswith("```"):
         t = t.strip("`")
@@ -40,22 +51,23 @@ def _extract_json(text: str) -> dict:
             first, rest = t.split("\n", 1)
             t = rest if first.strip().lower() in ("json", "") else t
     try:
-        return json.loads(t)
+        return _as_dict(json.loads(t))
     except (json.JSONDecodeError, TypeError):
         i, j = t.find("{"), t.rfind("}")
         if 0 <= i < j:
             try:
-                return json.loads(t[i:j + 1])
+                return _as_dict(json.loads(t[i:j + 1]))
             except json.JSONDecodeError:
                 return {}
         return {}
 
 
-def _coerce_score(obj: dict) -> Score:
-    if not obj:
+def _coerce_score(obj) -> Score:
+    if not isinstance(obj, dict) or not obj:
         return Score(value=0, reason="unparseable LLM response", tags=[])
     try:
-        val = int(obj.get("score", 0))
+        # Tolerate ints, int-strings, floats, and percentages like "85%" / "80.5".
+        val = int(round(float(str(obj.get("score", 0)).strip().rstrip("%") or 0)))
     except (TypeError, ValueError):
         val = 0
     val = max(0, min(100, val))

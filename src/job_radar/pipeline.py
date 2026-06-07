@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from .dedup import SeenStore
 from .filters import passes_rules
-from .models import Urgency
+from .models import Score, Urgency
 from .notify import ConsoleNotifier, DiscordNotifier
 from .scorer import ClaudeProvider, FakeProvider, GeminiProvider
 from .sources import enrich_postings, fetch_all
@@ -17,13 +17,30 @@ def _company_map(companies):
     return {(c.ats, c.slug): c for c in companies}
 
 
+def _dedup_by_uid(postings):
+    """Drop duplicate postings (same uid) within one poll, preserving order.
+    A job can appear twice across paginated pages of one board."""
+    seen_uids = set()
+    out = []
+    for p in postings:
+        if p.uid in seen_uids:
+            continue
+        seen_uids.add(p.uid)
+        out.append(p)
+    return out
+
+
 async def _score_all(provider, survivors, profile):
-    """Score survivors concurrently (bounded), preserving input order."""
+    """Score survivors concurrently (bounded), preserving input order. A failure on
+    one posting yields a zero Score rather than aborting the whole run."""
     sem = asyncio.Semaphore(SCORE_CONCURRENCY)
 
     async def one(p):
         async with sem:
-            return p, await provider.score(p, profile)
+            try:
+                return p, await provider.score(p, profile)
+            except Exception as e:
+                return p, Score(value=0, reason=f"score error: {e!r}"[:200], tags=[])
 
     return await asyncio.gather(*[one(p) for p in survivors])
 
@@ -79,6 +96,7 @@ async def run(config, *, provider=None, notifier=None, now=None, force_prime=Fal
 
     seen = SeenStore(settings.seen_path).load()
     postings, errors = await fetch_all(companies)
+    postings = _dedup_by_uid(postings)   # a job can repeat across paginated pages
     new = [p for p in postings if seen.is_new(p)]
 
     # Cold start (or explicit --prime): with no memory yet, prime the seen-set silently
@@ -86,7 +104,7 @@ async def run(config, *, provider=None, notifier=None, now=None, force_prime=Fal
     # on the next run. (If the persisted seen-set is ever lost, the next run re-primes
     # and skips one cycle of pings: an acceptable trade vs. a flood.)
     if force_prime or seen.is_empty():
-        for p in new:
+        for p in postings:
             seen.mark(p, now)
         seen.save(now=now)
         stats = {"boards": len(companies), "postings": len(postings), "errors": len(errors),
@@ -110,16 +128,21 @@ async def run(config, *, provider=None, notifier=None, now=None, force_prime=Fal
         if level == Urgency.LOW:
             digest.append((p, score, company))
         else:
-            await notifier.send_one(p, score, level, company, now)
-            pinged += 1
+            try:
+                await notifier.send_one(p, score, level, company, now)
+                pinged += 1
+            except Exception as e:  # a webhook hiccup must not abort the run
+                errors.append((p.company, f"notify: {e!r}"))
+    try:
+        await notifier.send_digest(digest, now)
+    except Exception as e:
+        errors.append(("digest", repr(e)))
 
-    # Mark every posting seen this run so nothing re-fires next run. Survivors are
-    # scored exactly once; rule-failures are recorded too so they aren't re-handled.
-    # (To force a full re-scan after broadening the profile, clear the seen-set.)
-    for p in new:
+    # Mark every fetched posting seen (refreshing its timestamp so long-lived listings
+    # never age out and re-fire), then ALWAYS persist. A failing webhook can neither
+    # abort the run nor leave the seen-set unsaved (which would re-send delivered items).
+    for p in postings:
         seen.mark(p, now)
-
-    await notifier.send_digest(digest, now)
     seen.save(now=now)
 
     stats = {

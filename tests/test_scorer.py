@@ -56,6 +56,26 @@ def test_extract_json_tolerates_fences_and_garbage():
     assert _extract_json("not json at all") == {}
 
 
+def test_extract_json_normalizes_non_dict_shapes():
+    # LLMs sometimes wrap the object in an array or return a bare scalar.
+    assert _extract_json('[{"score": 70, "reason": "x"}]') == {"score": 70, "reason": "x"}
+    assert _extract_json("88") == {}        # bare scalar -> {}
+    assert _extract_json('["a", "b"]') == {}  # array of non-dicts -> {}
+
+
+def test_coerce_score_never_crashes_and_is_tolerant():
+    from job_radar.scorer import _coerce_score
+    # Non-dict shapes must yield a zero Score, never raise AttributeError.
+    assert _coerce_score([{"score": 80}]).value == 0
+    assert _coerce_score(88).value == 0
+    assert _coerce_score("88").value == 0
+    assert _coerce_score({}).value == 0
+    # Tolerant numeric parsing.
+    assert _coerce_score({"score": "80.5"}).value == 80
+    assert _coerce_score({"score": "85%"}).value == 85
+    assert _coerce_score({"score": 200}).value == 100  # clamped
+
+
 async def test_claude_provider_posts_and_parses():
     captured = {}
 

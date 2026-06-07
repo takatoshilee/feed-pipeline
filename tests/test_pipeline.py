@@ -114,3 +114,45 @@ async def test_preview_is_read_only_and_ranks(tmp_path, monkeypatch):
     assert stats["scored"] == 1
     import os
     assert not os.path.exists(config.settings.seen_path)  # read-only: no state written
+
+
+class RaisingNotifier:
+    async def send_one(self, *a):
+        raise RuntimeError("simulated webhook 429")
+
+    async def send_digest(self, *a):
+        raise RuntimeError("simulated webhook 5xx")
+
+
+async def test_send_failure_does_not_abort_run_and_state_is_persisted(tmp_path, monkeypatch):
+    async def fake_fetch_all(companies, **kw):
+        return _postings(), []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    config = _config(tmp_path)
+    _prime_seen(config)
+
+    # A raising notifier must not abort the run; the error is recorded and state saved.
+    stats = await pipeline.run(config, provider=FakeProvider(value=90), notifier=RaisingNotifier(), now=NOW)
+    assert stats["errors"] >= 1
+    import os
+    assert os.path.exists(config.settings.seen_path)  # saved -> delivered items won't re-fire
+
+    # Next run: the posting is already seen, so it is not retried/re-sent.
+    stats2 = await pipeline.run(config, provider=FakeProvider(value=90), notifier=RaisingNotifier(), now=NOW)
+    assert stats2["new"] == 0
+
+
+async def test_intra_run_uid_dedup_pings_once(tmp_path, monkeypatch):
+    intern = _postings()[0]
+
+    async def fake_fetch_all(companies, **kw):
+        return [intern, intern], []  # same uid twice in one poll (e.g. pagination overlap)
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    config = _config(tmp_path)
+    _prime_seen(config)
+
+    notifier = FakeNotifier()
+    await pipeline.run(config, provider=FakeProvider(value=90), notifier=notifier, now=NOW)
+    assert len(notifier.ones) == 1  # deduped -> pinged once, not twice
