@@ -74,10 +74,13 @@ request to `/wday/cxs/<tenant>/<site>/jobs`. The host is the `wdN` part
 
 The cron doubles as an application tracker. When the Sheet secrets are present, each
 poll mirrors every match into a Google Sheet (one `New` row per job), and a second
-**daily** workflow (`remind.yml`) reads the Sheet and pings Discord about deadlines
-coming up and strong roles still unapplied. You triage in the Sheet — set `Priority`,
-fill `Deadline`, mark `Status` Applied/Skip — and the reminders stop nagging once a
-row is no longer `New`. No always-on process: it all rides the free Actions cron.
+**daily** workflow (`remind.yml`) reads the Sheet and pings Discord with a catch-up:
+how many roles are pending and how long since you last applied, then **must-apply**
+(rows you flagged high priority), **due soon** (deadline within 3 days), and strong
+roles still unapplied. You triage in the Sheet — set `Priority` (`must`/`high`/`med`/
+`low`), fill `Deadline`, mark `Status` Applied/Skip — and reminders stop nagging a row
+once it leaves `New`. So a busy stretch just means the backlog waits for you, sorted
+by what you said matters. No always-on process: it all rides the free Actions cron.
 
 Two extra Action secrets turn it on (the poll skips the Sheet cleanly if they're absent):
 - `GOOGLE_SHEET_ID` — from the Sheet URL, the part between `/d/` and `/edit`.
