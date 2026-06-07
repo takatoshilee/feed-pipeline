@@ -19,8 +19,9 @@ python -m job_radar       # full run; prints to console (dry-run, no secrets nee
 ## Going live
 
 1. Create a Discord channel + webhook; copy the webhook URL.
-2. Get a Gemini API key (free tier).
-3. Set GitHub Action secrets: `DISCORD_WEBHOOK_URL`, `LLM_API_KEY`, optional `DISCORD_ROLE_ID`.
+2. Get an LLM key. Default scorer is **Gemini Flash** (free tier). To use **Claude** instead,
+   set `LLM_PROVIDER=claude` (defaults to Haiku 4.5; override with `LLM_MODEL`).
+3. Set GitHub Action secrets: `DISCORD_WEBHOOK_URL`, `LLM_API_KEY`, optional `DISCORD_ROLE_ID`, `LLM_PROVIDER`.
 4. The `.github/workflows/radar.yml` cron runs every ~15 min and persists the
    seen-set via Actions cache.
 

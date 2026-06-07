@@ -1,7 +1,8 @@
 import httpx
 
 from job_radar.models import Posting, Profile
-from job_radar.scorer import build_prompt, parse_score, GeminiProvider, FakeProvider
+from job_radar.scorer import (build_prompt, parse_score, _extract_json,
+                              GeminiProvider, ClaudeProvider, FakeProvider)
 
 PROFILE = Profile(summary="CS student", title_include=[], title_exclude=[],
                   locations_allow=[], locations_block=[], freshness_days=21)
@@ -46,3 +47,30 @@ async def test_gemini_provider_posts_and_parses():
     assert "generativelanguage.googleapis.com" in captured["url"]
     assert "key=KEY" in captured["url"]
     assert s.value == 72 and "solid fit" in s.reason
+
+
+def test_extract_json_tolerates_fences_and_garbage():
+    assert _extract_json('{"score": 50}')["score"] == 50
+    assert _extract_json('```json\n{"score": 60}\n```')["score"] == 60
+    assert _extract_json("here you go: {\"score\": 70} thanks")["score"] == 70
+    assert _extract_json("not json at all") == {}
+
+
+async def test_claude_provider_posts_and_parses():
+    captured = {}
+
+    def handler(request):
+        captured["url"] = str(request.url)
+        captured["api_key"] = request.headers.get("x-api-key")
+        captured["version"] = request.headers.get("anthropic-version")
+        return httpx.Response(200, json={"content": [
+            {"type": "text", "text": '{"score": 81, "reason": "great fit", "tags": ["ai","intern"]}'}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = ClaudeProvider("KEY", model="claude-haiku-4-5", client=client)
+        s = await provider.score(POSTING, PROFILE)
+
+    assert "api.anthropic.com/v1/messages" in captured["url"]
+    assert captured["api_key"] == "KEY"
+    assert captured["version"] == "2023-06-01"
+    assert s.value == 81 and "great fit" in s.reason and "ai" in s.tags
