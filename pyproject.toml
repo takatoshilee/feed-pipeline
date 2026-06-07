@@ -11,6 +11,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+bot = ["discord.py>=2.4", "gspread>=6.0", "google-auth>=2.0", "python-dotenv>=1.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
