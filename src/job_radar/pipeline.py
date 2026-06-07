@@ -137,6 +137,9 @@ async def backfill(config, *, provider=None, sheet_sink=None, now=None,
     postings, errors = await fetch_all(companies)
     postings = _dedup_by_uid(postings)
     survivors = [p for p in postings if passes_rules(p, profile, now)]
+    # Skip roles already in the Sheet BEFORE scoring, so a re-run only spends LLM calls on
+    # genuinely-new postings (e.g. after widening the filter to US roles).
+    survivors = [p for p in survivors if not sheet_sink.is_tracked(p.uid)]
     # Freshest first, so a capped backfill captures the most relevant current openings.
     survivors.sort(key=lambda p: p.posted_at or datetime.min.replace(tzinfo=timezone.utc),
                    reverse=True)
