@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import datetime, timezone
 
 from .dedup import SeenStore
@@ -59,6 +60,20 @@ def build_notifier(settings):
     return DiscordNotifier(settings.webhook_url, settings.role_id)
 
 
+def build_sheet_sink(settings):
+    """Connect a SheetSink if a Sheet is configured AND its creds file exists; else
+    None (local dev / Sheet not set up). A connection failure disables the Sheet
+    rather than aborting the poll: job pings are the primary job, the Sheet is a mirror."""
+    if not (settings.sheet_id and settings.creds_path and os.path.exists(settings.creds_path)):
+        return None
+    try:
+        from . import sheet
+        return sheet.SheetSink(sheet.connect(settings.creds_path, settings.sheet_id))
+    except Exception as e:
+        print(f"job-radar: Sheet disabled ({e!r})")
+        return None
+
+
 async def preview(config, *, provider=None, now=None):
     """Show what the bot would surface from the CURRENT backlog: rules-filter all
     postings, score (capped), and print ranked by fit. Read-only: ignores and never
@@ -87,11 +102,13 @@ async def preview(config, *, provider=None, now=None):
     return stats
 
 
-async def run(config, *, provider=None, notifier=None, now=None, force_prime=False):
+async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None, force_prime=False):
     now = now or datetime.now(timezone.utc)
     profile, companies, settings = config.profile, config.companies, config.settings
     provider = provider or build_provider(settings)
     notifier = notifier or build_notifier(settings)
+    if sheet_sink is None:
+        sheet_sink = build_sheet_sink(settings)
     cmap = _company_map(companies)
 
     seen = SeenStore(settings.seen_path).load()
@@ -119,12 +136,21 @@ async def run(config, *, provider=None, notifier=None, now=None, force_prime=Fal
     scored = await _score_all(provider, survivors, profile)
 
     digest = []
-    pinged = 0
+    pinged = tracked = 0
     for p, score in scored:
         company = cmap.get((p.ats, p.company))
         level = classify(p, score, company, profile, now)
         if level is None:
             continue
+        # Mirror every real match (incl. digest-level) into the Sheet so it's the full
+        # inventory to triage; Discord stays a heads-up for the urgent ones. A Sheet
+        # hiccup is recorded but can't abort the run (same discipline as the notifier).
+        if sheet_sink is not None:
+            try:
+                if await asyncio.to_thread(sheet_sink.add, p, score):
+                    tracked += 1
+            except Exception as e:
+                errors.append((p.company, f"sheet: {e!r}"))
         if level == Urgency.LOW:
             digest.append((p, score, company))
         else:
@@ -147,7 +173,8 @@ async def run(config, *, provider=None, notifier=None, now=None, force_prime=Fal
 
     stats = {
         "boards": len(companies), "postings": len(postings), "errors": len(errors),
-        "new": len(new), "primed": 0, "survivors": len(survivors), "pinged": pinged, "digest": len(digest),
+        "new": len(new), "primed": 0, "survivors": len(survivors), "pinged": pinged,
+        "digest": len(digest), "tracked": tracked,
     }
     print("job-radar run:", stats)
     if errors:
