@@ -1,0 +1,31 @@
+# slug,ats[,tier]  -- batch import; validate --prune drops any dead ones
+# Canadian / co-op-relevant first
+shopify,greenhouse,dream
+faire,greenhouse,target
+clio,greenhouse,target
+hootsuite,greenhouse,target
+lightspeed,greenhouse,target
+ada,ashby,target
+neofinancial,ashby,target
+float,ashby,target
+# big tech / well-known (greenhouse)
+airbnb,greenhouse,target
+lyft,greenhouse,target
+twitch,greenhouse,target
+gusto,greenhouse,target
+flexport,greenhouse,target
+retool,greenhouse,target
+mongodb,greenhouse,target
+hashicorp,greenhouse,target
+confluent,greenhouse,target
+sentry,greenhouse,target
+webflow,greenhouse,target
+amplitude,greenhouse,target
+elastic,greenhouse,target
+sofi,greenhouse,target
+anduril,greenhouse,target
+# ashby
+deel,ashby,target
+clerk,ashby,target
+resend,ashby,target
+val,ashby,target
