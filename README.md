@@ -6,9 +6,10 @@ profile, and pings a Discord channel with color-coded, urgency-tagged embeds.
 Runs free on GitHub Actions cron. Polling the ATS APIs directly means new reqs
 are seen within minutes of going live, **upstream of LinkedIn/Indeed aggregators**.
 
-Currently watching **200+ live boards** (incl. RBC/CIBC/BMO/Sun Life/TD early-talent
-boards for Canadian co-op recruiting, plus big tech, fintech, and AI/dev-tool startups).
-Grow the list freely with `seed` + `validate`; dead slugs are skipped.
+Currently watching **300+ live boards** (incl. RBC/CIBC/BMO/Sun Life/TD early-talent
+boards for Canadian co-op recruiting, big tech, fintech, and a deep bench of niche/YC
+startups: AI infra, dev tools, robotics, defense). Grow the list freely with `seed` +
+`validate`; dead slugs are skipped, and newly-added boards prime silently (no flood).
 
 ## Quick start (local, no secrets needed)
 
@@ -117,7 +118,8 @@ Embed Links (Guild Install).
 ## How it works
 
 `sources` fetch all boards concurrently → `dedup` drops already-seen (and primes
-silently on first run) → `filters` free rules pre-filter → `scorer` LLM-scores
+silently on first run, and per-board when you add a new company, so neither floods)
+→ `filters` free rules pre-filter → `scorer` LLM-scores
 survivors (Gemini/Claude, enriching Workday/SmartRecruiter descriptions first; a
 deterministic heuristic transparently covers any posting the LLM can't score, e.g.
 on a rate limit, so an outage degrades coverage instead of dropping it) →
