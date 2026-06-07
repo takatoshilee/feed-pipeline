@@ -42,11 +42,13 @@ def _config(tmp_path):
 
 
 def _prime_seen(config):
-    """Make the seen-set non-empty (without recording the real postings) so a run is
-    treated as a normal run rather than a cold start."""
+    """Make the seen-set non-empty AND mark company 'c' as already known (a prior posting
+    from it), so a run is a normal warm run: not a cold start, and not a newly-added board
+    that would be silently primed. The seed uid differs from the test postings' uids, so
+    those still count as new."""
     seed = SeenStore(config.settings.seen_path)
-    seed.mark(Posting(uid="seed:0", ats="x", company="x", title="t", location="l",
-                      url="u", posted_at=None, description="d"), now=NOW)
+    seed.mark(Posting(uid="greenhouse:c:seed", ats="greenhouse", company="c", title="t",
+                      location="l", url="u", posted_at=None, description="d"), now=NOW)
     seed.save(now=NOW)
 
 
@@ -209,6 +211,43 @@ async def test_sheet_failure_does_not_abort_run(tmp_path, monkeypatch):
     assert stats["errors"] >= 1
     assert len(notifier.ones) == 1   # the Discord ping still fired despite the Sheet error
     assert stats["tracked"] == 0
+
+
+async def test_newly_added_board_is_primed_silently_not_flooded(tmp_path, monkeypatch):
+    # Company 'c' is known; company 'd' was just added. Both have a fresh matching intern.
+    intern_c = Posting(uid="greenhouse:c:1", ats="greenhouse", company="c", title="Software Intern",
+                       location="Toronto", url="u1", posted_at=NOW, description="d")
+    intern_d = Posting(uid="greenhouse:d:1", ats="greenhouse", company="d", title="Software Intern",
+                       location="Toronto", url="u2", posted_at=NOW, description="d")
+
+    async def fake_fetch_all(companies, **kw):
+        return [intern_c, intern_d], []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    profile = Profile(summary="s", title_include=["intern"], title_exclude=["senior"],
+                      locations_allow=["toronto"], locations_block=[], freshness_days=21)
+    companies = [Company(slug="c", ats="greenhouse"), Company(slug="d", ats="greenhouse")]
+    settings = Settings(webhook_url=None, llm_api_key=None, llm_model="m", llm_provider="gemini",
+                        role_id=None, seen_path=str(tmp_path / "seen.json"), dry_run=True)
+    config = Config(profile, companies, settings)
+    _prime_seen(config)  # marks company 'c' as known; 'd' is therefore newly added
+
+    notifier = FakeNotifier()
+    stats = await pipeline.run(config, provider=FakeProvider(value=90), notifier=notifier, now=NOW)
+    assert [p.company for p, _ in notifier.ones] == ["c"]  # only the known board pings
+    assert stats["primed"] == 1                            # d's backlog absorbed silently
+
+    # Next run: d is now known, so a genuinely-new posting from d DOES ping.
+    intern_d2 = Posting(uid="greenhouse:d:2", ats="greenhouse", company="d", title="Backend Intern",
+                        location="Toronto", url="u3", posted_at=NOW, description="d")
+
+    async def fetch2(companies, **kw):
+        return [intern_c, intern_d, intern_d2], []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fetch2)
+    notifier2 = FakeNotifier()
+    await pipeline.run(config, provider=FakeProvider(value=90), notifier=notifier2, now=NOW)
+    assert [p.company for p, _ in notifier2.ones] == ["d"]  # only the new d posting; c:1 already seen
 
 
 async def test_backfill_writes_to_sheet_without_touching_state(tmp_path, monkeypatch):
