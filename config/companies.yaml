@@ -14,9 +14,9 @@ companies:
   - {slug: openai, ats: ashby, tier: dream}
   - {slug: cohere, ats: ashby, tier: dream}
   - {slug: notion, ats: ashby, tier: dream}
+  - {slug: wealthsimple, ats: ashby, tier: dream}   # on Ashby, not Lever (~29 postings)
   - {slug: ramp, ats: ashby, tier: target}
   - {slug: linear, ats: ashby, tier: target}
-  - {slug: vercel, ats: ashby, tier: target}
   - {slug: posthog, ats: ashby, tier: target}
   - {slug: mercury, ats: ashby, tier: target}
   - {slug: baseten, ats: ashby, tier: target}
@@ -25,6 +25,7 @@ companies:
 
   # --- Greenhouse ---
   - {slug: stripe, ats: greenhouse, tier: target}
+  - {slug: vercel, ats: greenhouse, tier: target}
   - {slug: anthropic, ats: greenhouse, tier: dream}
   - {slug: databricks, ats: greenhouse, tier: target}
   - {slug: coinbase, ats: greenhouse, tier: target}
@@ -40,9 +41,6 @@ companies:
   - {slug: pinterest, ats: greenhouse, tier: target}
   - {slug: brex, ats: greenhouse, tier: target}
   - {slug: samsara, ats: greenhouse, tier: target}
-
-  # --- Lever ---
-  - {slug: wealthsimple, ats: lever, tier: dream}   # verify: returned 0, may have moved ATS
 
   # --- SmartRecruiters (identifier is the branded company id, e.g. "BoschGroup", case-sensitive) ---
   - {slug: visa, ats: smartrecruiters, tier: target}        # ~16 postings live
