@@ -105,9 +105,13 @@ class SheetSink:
         return True
 
     def flush(self) -> int:
-        """Write all queued rows in a single batched call. Returns the number written."""
+        """Write all queued rows in a single batched call. Returns the number written.
+        insert_data_option=INSERT_ROWS makes the append INSERT new rows rather than
+        OVERWRITE (the API default), so a concurrent writer (e.g. a cron run firing while
+        a manual backfill runs) can't clobber rows instead of adding them."""
         if not self._buffer:
             return 0
         rows, self._buffer = self._buffer, []
-        self.ws.append_rows(rows, value_input_option="USER_ENTERED")
+        self.ws.append_rows(rows, value_input_option="USER_ENTERED",
+                            insert_data_option="INSERT_ROWS")
         return len(rows)

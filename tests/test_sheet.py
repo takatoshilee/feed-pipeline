@@ -17,7 +17,7 @@ class FakeWS:
     def append_row(self, vals, value_input_option=None):
         self.rows.append([str(v) for v in vals])
 
-    def append_rows(self, rows, value_input_option=None):
+    def append_rows(self, rows, value_input_option=None, insert_data_option=None):
         for r in rows:
             self.rows.append([str(v) for v in r])
 
