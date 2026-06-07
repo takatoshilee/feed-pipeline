@@ -195,14 +195,21 @@ async def _setup():
 
 
 def main():
+    import sys
     from dotenv import load_dotenv
     load_dotenv()
 
     global WS, PROFILE, COMPANIES, CMAP, PROVIDER, CHANNEL_ID, SEEN_PATH
-    token = os.environ["DISCORD_BOT_TOKEN"]
-    CHANNEL_ID = int(os.environ["DISCORD_CHANNEL_ID"])
-    SEEN_PATH = os.environ.get("SEEN_PATH", ".state/seen.json")
 
+    # Validate the Google side first (the most error-prone part of setup). With --check,
+    # connect to the Sheet, confirm, and exit without touching Discord.
+    WS = sheet.connect(os.environ["GOOGLE_CREDENTIALS_PATH"], os.environ["GOOGLE_SHEET_ID"])
+    if "--check" in sys.argv:
+        print(f"OK: connected to your Google Sheet (tab '{WS.title}') and headers are ready. "
+              f"Google setup is good.")
+        return
+
+    SEEN_PATH = os.environ.get("SEEN_PATH", ".state/seen.json")
     PROFILE = load_profile(os.environ.get("PROFILE_PATH", "config/profile.yaml"))
     COMPANIES = load_companies(os.environ.get("COMPANIES_PATH", "config/companies.yaml"))
     CMAP = _company_map(COMPANIES)
@@ -213,8 +220,8 @@ def main():
         llm_model = os.environ.get("LLM_MODEL", "")
     PROVIDER = build_provider(_S())
 
-    WS = sheet.connect(os.environ["GOOGLE_CREDENTIALS_PATH"], os.environ["GOOGLE_SHEET_ID"])
-
+    token = os.environ["DISCORD_BOT_TOKEN"]
+    CHANNEL_ID = int(os.environ["DISCORD_CHANNEL_ID"])
     bot.setup_hook = _setup
     bot.run(token)
 
