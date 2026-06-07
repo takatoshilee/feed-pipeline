@@ -1,8 +1,11 @@
+import types
+
 import httpx
 
-from job_radar.models import Posting, Profile
-from job_radar.scorer import (build_prompt, parse_score, _extract_json,
-                              GeminiProvider, ClaudeProvider, FakeProvider)
+from job_radar.models import Posting, Profile, Score
+from job_radar.scorer import (build_prompt, parse_score, _extract_json, heuristic_score,
+                              GeminiProvider, ClaudeProvider, FakeProvider,
+                              HeuristicProvider, FallbackProvider)
 
 PROFILE = Profile(summary="CS student", title_include=[], title_exclude=[],
                   locations_allow=[], locations_block=[], freshness_days=21)
@@ -93,6 +96,46 @@ def test_coerce_score_never_crashes_and_is_tolerant():
     assert _coerce_score({"score": "80.5"}).value == 80
     assert _coerce_score({"score": "85%"}).value == 85
     assert _coerce_score({"score": 200}).value == 100  # clamped
+
+
+def _post(title, desc=""):
+    return Posting(uid="x:1", ats="ashby", company="c", title=title, location="Toronto",
+                   url="u", posted_at=None, description=desc)
+
+
+def test_heuristic_ranks_early_career_techy_above_senior():
+    intern = heuristic_score(_post("Software Engineer Intern", "Python, React, AWS"), PROFILE)
+    senior = heuristic_score(_post("Senior Staff Engineer", "Python"), PROFILE)
+    plain = heuristic_score(_post("Data Analyst", ""), PROFILE)
+    assert intern.value > plain.value > senior.value
+    assert intern.ok is True and "heuristic" in intern.tags  # real, sortable, transparent
+    assert 0 <= senior.value <= 100
+
+
+async def test_fallback_uses_primary_when_ok_else_heuristic():
+    class OkPrimary:
+        async def score(self, p, prof):
+            return Score(73, "llm", ok=True)
+
+    class FailPrimary:
+        async def score(self, p, prof):
+            return Score(0, "LLM error: 429", ok=False)
+
+    good = await FallbackProvider(OkPrimary(), HeuristicProvider()).score(
+        _post("Software Engineer Intern"), PROFILE)
+    assert good.value == 73 and "heuristic" not in good.tags  # primary score kept
+
+    fell = await FallbackProvider(FailPrimary(), HeuristicProvider()).score(
+        _post("Software Engineer Intern", "Python React"), PROFILE)
+    assert fell.ok is True and "heuristic" in fell.tags  # degraded to heuristic, not zero
+
+
+def test_build_provider_wraps_llm_and_falls_back_keyless():
+    from job_radar.pipeline import build_provider
+    keyless = build_provider(types.SimpleNamespace(llm_api_key=None, llm_provider="gemini", llm_model=""))
+    assert isinstance(keyless, HeuristicProvider)
+    withkey = build_provider(types.SimpleNamespace(llm_api_key="K", llm_provider="gemini", llm_model=""))
+    assert isinstance(withkey, FallbackProvider)
 
 
 async def test_claude_provider_posts_and_parses():
