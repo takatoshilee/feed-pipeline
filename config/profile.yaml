@@ -49,15 +49,54 @@ title_exclude:
   - clearance
   - phd
   - postdoc
+  # Non-technical role types (from the tuning analysis; high-precision, never appear in
+  # SWE/AI/Data titles). See TUNING_RECOMMENDATIONS.md for medium-confidence candidates.
+  - coordinator
+  - administrative
+  - advisor
+  - partnership
+  - counsel
+  - representative
+  - designer
+  - portfolio
+  - "it systems"
+  - "provider data operations"
 
 locations_allow:
+  # Canada
   - toronto
   - ontario
   - canada
   - canadian
+  - waterloo
+  - montreal
+  - vancouver
+  - ottawa
+  # United States (country + major tech hubs; you want US roles too)
+  - "united states"
+  - usa
+  - "new york"
+  - "san francisco"
+  - "bay area"
+  - "san jose"
+  - "palo alto"
+  - "mountain view"
+  - sunnyvale
+  - seattle
+  - boston
+  - austin
+  - "los angeles"
+  - chicago
+  - denver
+  - atlanta
+  - "washington"
+  # Remote (note: bare "remote" also matches foreign "X - Remote"; see TUNING_RECOMMENDATIONS.md)
   - remote
   - "north america"
 
+# TODO (your call, see TUNING_RECOMMENDATIONS.md): block foreign-remote leaks like
+# "India - Remote" here. Naive substring blocking is risky ("india" matches "indiana"),
+# so it needs care; left empty pending your review.
 locations_block: []
 
 freshness_days: 21
