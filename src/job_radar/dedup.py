@@ -41,11 +41,14 @@ class SeenStore:
         now = now or datetime.now(timezone.utc)
         self._seen[posting.uid] = now.isoformat()
 
-    def save(self, keep_days: int = 60, now: datetime | None = None) -> None:
+    def save(self, keep_days: int = 30, now: datetime | None = None) -> None:
+        # keep_days bounds how long a CLOSED posting is remembered; live postings are
+        # re-marked every run so they never age out. 30d is ample (guards re-ping of a
+        # job that closes then re-opens) and roughly halves steady-state size.
         now = now or datetime.now(timezone.utc)
         cutoff = now - timedelta(days=keep_days)
         pruned = {uid: ts for uid, ts in self._seen.items() if _parse(ts) >= cutoff}
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         with open(self.path, "w") as f:
-            json.dump(pruned, f)
+            json.dump(pruned, f, separators=(",", ":"))  # compact: smaller cache uploads
         self._seen = pruned

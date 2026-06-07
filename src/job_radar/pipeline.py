@@ -108,7 +108,7 @@ async def run(config, *, provider=None, notifier=None, now=None, force_prime=Fal
             seen.mark(p, now)
         seen.save(now=now)
         stats = {"boards": len(companies), "postings": len(postings), "errors": len(errors),
-                 "new": len(new), "primed": len(new), "survivors": 0, "pinged": 0, "digest": 0}
+                 "new": len(new), "primed": len(postings), "survivors": 0, "pinged": 0, "digest": 0}
         print("job-radar PRIMED (first run, no notifications):", stats)
         if errors:
             print("errors (first 10):", errors[:10])
