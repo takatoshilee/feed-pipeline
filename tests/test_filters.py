@@ -1,7 +1,16 @@
 from datetime import datetime, timezone, timedelta
 
 from job_radar.models import Posting, Profile
-from job_radar.filters import passes_rules
+from job_radar.filters import passes_rules, visa_note
+
+
+def test_visa_note_flags_us_onsite_only():
+    assert visa_note("San Francisco, CA") == "US on-site: needs sponsored J-1 visa"
+    assert visa_note("New York, United States") == "US on-site: needs sponsored J-1 visa"
+    assert visa_note("Toronto, ON") == ""            # Canada: no flag
+    assert visa_note("Remote, US") == ""             # remote from Canada: no visa needed
+    assert visa_note("Remote") == ""
+    assert visa_note("") == ""
 
 NOW = datetime(2026, 6, 1, tzinfo=timezone.utc)
 PROFILE = Profile(

@@ -19,6 +19,28 @@ def _location_blocked(loc: str, block_terms) -> bool:
     return False
 
 
+_CA_HINT = ("canada", "canadian", "ontario", "toronto", "waterloo", "montreal", "montréal",
+            "vancouver", "ottawa", "quebec", "québec", "alberta", "calgary", "british columbia")
+_US_HINT = ("united states", "usa", "u.s.", "san francisco", "new york", "seattle", "austin",
+            "boston", "los angeles", "palo alto", "mountain view", "sunnyvale", "san jose",
+            "san mateo", "santa clara", "menlo park", "bay area", "chicago", "denver", "atlanta",
+            "bellevue", "redmond", "cupertino", "san diego", "pittsburgh", "raleigh", "dallas",
+            "philadelphia", "washington", "phoenix", "nashville", "miami")
+
+
+def visa_note(location: str) -> str:
+    """A heads-up for the Sheet's Notes column: US ON-SITE roles need a sponsored J-1.
+    Remote (work from Canada) and Canadian roles need nothing, so they return ''."""
+    loc = (location or "").lower()
+    if not loc or "remote" in loc:
+        return ""
+    if any(c in loc for c in _CA_HINT):
+        return ""
+    if any(u in loc for u in _US_HINT):
+        return "US on-site: needs sponsored J-1 visa"
+    return ""
+
+
 def passes_rules(posting: Posting, profile: Profile, now: datetime | None = None) -> bool:
     now = now or datetime.now(timezone.utc)
     title = posting.title.lower()

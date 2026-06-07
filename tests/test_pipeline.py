@@ -163,8 +163,12 @@ async def test_intra_run_uid_dedup_pings_once(tmp_path, monkeypatch):
 
 
 class FakeSink:
-    def __init__(self):
+    def __init__(self, tracked=()):
         self.added = []
+        self._tracked = set(tracked)
+
+    def is_tracked(self, uid):
+        return uid in self._tracked
 
     def add(self, posting, score):
         self.added.append(posting.uid)

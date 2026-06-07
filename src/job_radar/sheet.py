@@ -1,5 +1,6 @@
 """Google Sheet as the tracker's source of truth. The gspread/google-auth imports are
 lazy (inside connect) so the row logic below is testable with a fake worksheet."""
+from .filters import visa_note
 from .models import Posting, Score
 
 HEADERS = ["uid", "Company", "Role", "Link", "Fit", "Location", "Posted",
@@ -43,8 +44,9 @@ def existing_uids(ws) -> set:
 
 def _row_values(posting: Posting, score: Score) -> list:
     posted = posting.posted_at.date().isoformat() if posting.posted_at else ""
+    notes = visa_note(posting.location)  # flags US on-site roles that need a J-1
     return [posting.uid, posting.company, posting.title, posting.url, score.value,
-            posting.location, posted, "New", "", "", "", ""]
+            posting.location, posted, "New", "", "", notes, ""]
 
 
 def append_match(ws, posting: Posting, score: Score) -> None:
@@ -88,6 +90,10 @@ class SheetSink:
         self.ws = ws
         self._seen = existing_uids(ws)
         self._buffer: list[list] = []
+
+    def is_tracked(self, uid: str) -> bool:
+        """True if this uid is already in the Sheet (so a re-run can skip scoring it)."""
+        return uid in self._seen
 
     def add(self, posting: Posting, score: Score) -> bool:
         """Queue the posting as a new 'New' row (written on flush). Returns False if its
