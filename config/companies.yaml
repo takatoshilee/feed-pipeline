@@ -1,14 +1,55 @@
-# Each entry: slug + ats (greenhouse|lever|ashby) + tier (dream|target)
+# The watch-list. Each entry: slug + ats + tier (dream|target).
+#   ats: greenhouse | lever | ashby | workday | smartrecruiters
 # Verify a slug by opening its board:
-#   greenhouse -> https://boards.greenhouse.io/<slug>
-#   lever      -> https://jobs.lever.co/<slug>
-#   ashby      -> https://jobs.ashbyhq.com/<slug>
-# Wrong slugs simply 404 and are skipped, so this is safe to grow freely.
+#   greenhouse      -> https://boards.greenhouse.io/<slug>
+#   lever           -> https://jobs.lever.co/<slug>
+#   ashby           -> https://jobs.ashbyhq.com/<slug>
+#   smartrecruiters -> https://jobs.smartrecruiters.com/<slug>
+#   workday         -> needs wd_host + wd_site too (open careers page, watch the
+#                      /wday/cxs/<tenant>/<site>/jobs request; host is e.g. wd5)
+# Wrong slugs 404 and are skipped, so it's safe to grow this freely.
+# To bulk-add from a list:  python -m job_radar.seed <list.csv>
 companies:
-  - {slug: wealthsimple, ats: lever, tier: dream}
+  # --- Ashby ---
+  - {slug: openai, ats: ashby, tier: dream}
+  - {slug: cohere, ats: ashby, tier: dream}
   - {slug: notion, ats: ashby, tier: dream}
   - {slug: ramp, ats: ashby, tier: target}
-  - {slug: cohere, ats: ashby, tier: dream}
-  - {slug: openai, ats: ashby, tier: dream}
-  - {slug: databricks, ats: greenhouse, tier: target}
+  - {slug: linear, ats: ashby, tier: target}
+  - {slug: vercel, ats: ashby, tier: target}
+  - {slug: posthog, ats: ashby, tier: target}
+  - {slug: mercury, ats: ashby, tier: target}
+  - {slug: baseten, ats: ashby, tier: target}
+  - {slug: modal, ats: ashby, tier: target}
+  - {slug: perplexity, ats: ashby, tier: target}
+
+  # --- Greenhouse ---
   - {slug: stripe, ats: greenhouse, tier: target}
+  - {slug: anthropic, ats: greenhouse, tier: dream}
+  - {slug: databricks, ats: greenhouse, tier: target}
+  - {slug: coinbase, ats: greenhouse, tier: target}
+  - {slug: dropbox, ats: greenhouse, tier: target}
+  - {slug: robinhood, ats: greenhouse, tier: target}
+  - {slug: instacart, ats: greenhouse, tier: target}
+  - {slug: gitlab, ats: greenhouse, tier: target}
+  - {slug: cloudflare, ats: greenhouse, tier: target}
+  - {slug: datadog, ats: greenhouse, tier: target}
+  - {slug: asana, ats: greenhouse, tier: target}
+  - {slug: affirm, ats: greenhouse, tier: target}
+  - {slug: reddit, ats: greenhouse, tier: target}
+  - {slug: pinterest, ats: greenhouse, tier: target}
+  - {slug: brex, ats: greenhouse, tier: target}
+  - {slug: samsara, ats: greenhouse, tier: target}
+
+  # --- Lever ---
+  - {slug: wealthsimple, ats: lever, tier: dream}   # verify: returned 0, may have moved ATS
+
+  # --- SmartRecruiters (identifier is the branded company id, e.g. "BoschGroup", case-sensitive) ---
+  - {slug: visa, ats: smartrecruiters, tier: target}        # ~16 postings live
+  - {slug: BoschGroup, ats: smartrecruiters, tier: target}  # ~500 postings live
+
+  # --- Workday (needs wd_host + wd_site) ---
+  - {slug: nvidia, ats: workday, tier: dream, wd_host: wd5, wd_site: NVIDIAExternalCareerSite}
+  # Banks/enterprises (your co-op targets) live on Workday too. Add them by finding
+  # the /wday/cxs/<tenant>/<site>/jobs request on their careers page, e.g.:
+  # - {slug: <tenant>, ats: workday, tier: target, wd_host: wd3, wd_site: <SiteName>}

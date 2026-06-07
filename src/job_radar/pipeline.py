@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 
 from .dedup import SeenStore
@@ -8,9 +9,22 @@ from .scorer import FakeProvider, GeminiProvider
 from .sources import fetch_all
 from .urgency import classify
 
+SCORE_CONCURRENCY = 6
+
 
 def _company_map(companies):
     return {(c.ats, c.slug): c for c in companies}
+
+
+async def _score_all(provider, survivors, profile):
+    """Score survivors concurrently (bounded), preserving input order."""
+    sem = asyncio.Semaphore(SCORE_CONCURRENCY)
+
+    async def one(p):
+        async with sem:
+            return p, await provider.score(p, profile)
+
+    return await asyncio.gather(*[one(p) for p in survivors])
 
 
 def build_provider(settings):
@@ -52,11 +66,11 @@ async def run(config, *, provider=None, notifier=None, now=None):
         return stats
 
     survivors = [p for p in new if passes_rules(p, profile, now)]
+    scored = await _score_all(provider, survivors, profile)
 
     digest = []
     pinged = 0
-    for p in survivors:
-        score = await provider.score(p, profile)
+    for p, score in scored:
         company = cmap.get((p.ats, p.company))
         level = classify(p, score, company, profile, now)
         if level is None:

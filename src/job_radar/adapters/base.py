@@ -1,3 +1,4 @@
+import asyncio
 import html
 import re
 from datetime import datetime, timezone
@@ -6,11 +7,23 @@ from dateutil import parser as dateparser
 
 USER_AGENT = "job-radar/0.1 (+https://github.com/job-radar)"
 TIMEOUT = 20.0
+RETRY_STATUS = {429, 500, 502, 503, 504}
+BACKOFF_BASE = 0.5   # seconds; small so tests stay fast, real transient errors don't care
+BACKOFF_MAX = 8.0
 
 
-async def get_json(client, url, *, method="GET", json_body=None):
+async def get_json(client, url, *, method="GET", json_body=None, retries=2):
+    """GET/POST JSON with capped exponential backoff on transient status codes."""
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
-    resp = await client.request(method, url, headers=headers, json=json_body, timeout=TIMEOUT)
+    resp = None
+    for attempt in range(retries + 1):
+        resp = await client.request(method, url, headers=headers, json=json_body, timeout=TIMEOUT)
+        if resp.status_code in RETRY_STATUS and attempt < retries:
+            retry_after = resp.headers.get("Retry-After")
+            wait = float(retry_after) if (retry_after and retry_after.isdigit()) else BACKOFF_BASE * (2 ** attempt)
+            await asyncio.sleep(min(wait, BACKOFF_MAX))
+            continue
+        break
     resp.raise_for_status()
     return resp.json()
 
