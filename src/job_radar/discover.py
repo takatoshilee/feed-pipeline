@@ -24,8 +24,11 @@ from .adapters.base import TIMEOUT
 from .config import load_profile
 from .filters import passes_rules
 from .models import Company
+from .scorer import heuristic_score
 from .seed import merge
 from .sources import ADAPTERS
+
+RELEVANCE_MIN = 60   # a discovered board must have a role scoring at least this (heuristic)
 
 LIST_SOURCES = [
     "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/.github/scripts/listings.json",
@@ -70,7 +73,10 @@ async def mine_candidates(client) -> dict:
 
 
 async def is_relevant(client, company: Company, profile) -> bool:
-    """True if the board currently has >=1 posting passing the profile's rules."""
+    """True if the board currently has a posting that passes the rules AND scores at least
+    RELEVANCE_MIN on the free heuristic. The heuristic gate keeps out companies whose only
+    'match' is a marginal rules-passing role (e.g. a generic non-tech 'analyst'), so the
+    watch-list grows with genuinely promising boards, not noise."""
     adapter = ADAPTERS.get(company.ats)
     if adapter is None:
         return False
@@ -78,7 +84,8 @@ async def is_relevant(client, company: Company, profile) -> bool:
         posts = await adapter.fetch(client, company)
     except Exception:
         return False
-    return any(passes_rules(p, profile) for p in posts)
+    return any(passes_rules(p, profile) and heuristic_score(p, profile).value >= RELEVANCE_MIN
+               for p in posts)
 
 
 async def discover(companies_path="config/companies.yaml", profile_path="config/profile.yaml",
