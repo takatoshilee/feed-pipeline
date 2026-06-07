@@ -1,0 +1,39 @@
+# Broad tech batch; validate --prune drops dead slugs. slug,ats[,tier]
+# Greenhouse
+snowflake,greenhouse,target
+hubspot,greenhouse,target
+twilio,greenhouse,target
+okta,greenhouse,target
+zendesk,greenhouse,target
+sourcegraph,greenhouse,target
+benchling,greenhouse,target
+airtable,greenhouse,target
+carta,greenhouse,target
+vanta,greenhouse,target
+scaleai,greenhouse,target
+nerdwallet,greenhouse,target
+chime,greenhouse,target
+betterment,greenhouse,target
+discord,greenhouse,target
+figma,greenhouse,target
+# Ashby
+elevenlabs,ashby,target
+mistral,ashby,target
+glean,ashby,target
+writer,ashby,target
+clay,ashby,target
+together,ashby,target
+anyscale,ashby,target
+fireworks,ashby,target
+decagon,ashby,target
+sierra,ashby,target
+suno,ashby,target
+abridge,ashby,target
+contextual,ashby,target
+anysphere,ashby,target
+runway,ashby,target
+# Canadian-flavored
+1password,greenhouse,target
+jobber,greenhouse,target
+benevity,greenhouse,target
+vidyard,lever,target
