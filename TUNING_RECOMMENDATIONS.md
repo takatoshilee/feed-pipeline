@@ -65,9 +65,16 @@ if loc:
         if (" " in b and b in loc) or (b in tokens):  # phrase substring, else whole token
             return False
 ```
-Then a safe `locations_block`: `india, united kingdom, ireland, germany, france, spain,
-netherlands, poland, portugal, italy, switzerland, sweden, singapore, australia, new zealand,
-japan, korea, china, taiwan, hong kong, philippines, indonesia, brazil, mexico, argentina,
-israel, emea, apac, latam, london, dublin, bengaluru, bangalore, hyderabad, pune` (extend as needed).
+Then a `locations_block` of **countries/regions only** (NOT city names): `india, united kingdom,
+ireland, germany, france, spain, netherlands, poland, portugal, italy, switzerland, sweden,
+singapore, australia, new zealand, japan, korea, china, taiwan, hong kong, philippines,
+indonesia, brazil, mexico, argentina, israel, emea, apac, latam` plus unambiguous foreign
+tech hubs `bengaluru, bangalore, hyderabad, pune` (extend as needed).
+
+> ⚠️ **Avoid city names that collide with North America.** Blocking `london` would wrongly cut
+> **London, Ontario** (Canada); `paris` would cut Paris, Texas. Stick to country/region names
+> and clearly-foreign hubs. The token-aware matcher above already protects single words from
+> substring collisions (`india` won't match `indiana`), but it can't disambiguate same-named
+> cities — so keep cities out of the block-list.
 
 I left this for you because location preference is yours and the code tweak deserves a test.
