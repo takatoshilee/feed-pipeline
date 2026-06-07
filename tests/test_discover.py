@@ -1,4 +1,37 @@
 from job_radar import discover as disc
+from job_radar.models import Company, Posting, Profile
+
+
+def _profile():
+    return Profile(summary="python react full-stack", title_include=["intern", "software"],
+                   title_exclude=["senior"], locations_allow=["toronto", "remote"],
+                   locations_block=[], freshness_days=21)
+
+
+def _post(title, desc=""):
+    return Posting(uid="x:1", ats="greenhouse", company="x", title=title, location="Toronto",
+                   url="u", posted_at=None, description=desc)
+
+
+class _FakeAdapter:
+    def __init__(self, posts):
+        self.posts = posts
+
+    async def fetch(self, client, company):
+        return self.posts
+
+
+async def test_is_relevant_requires_a_promising_role(monkeypatch):
+    prof = _profile()
+    # early-career SWE role -> heuristic well above the gate
+    monkeypatch.setitem(disc.ADAPTERS, "greenhouse", _FakeAdapter([_post("Software Engineer Intern", "python react")]))
+    assert await disc.is_relevant(None, Company(slug="g", ats="greenhouse"), prof) is True
+    # full-time 'Software Developer' passes rules (has 'software') but scores below the gate
+    monkeypatch.setitem(disc.ADAPTERS, "greenhouse", _FakeAdapter([_post("Software Developer")]))
+    assert await disc.is_relevant(None, Company(slug="g", ats="greenhouse"), prof) is False
+    # no matching role at all
+    monkeypatch.setitem(disc.ADAPTERS, "greenhouse", _FakeAdapter([_post("Senior Marketing Manager")]))
+    assert await disc.is_relevant(None, Company(slug="g", ats="greenhouse"), prof) is False
 
 
 def _cfg(tmp_path):

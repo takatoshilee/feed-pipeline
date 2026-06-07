@@ -36,9 +36,9 @@ jobs:
           if ! git diff --quiet config/companies.yaml; then
             git config user.name "job-radar-bot"
             git config user.email "actions@github.com"
-            n=$(git diff --numstat config/companies.yaml | awk '{print $1}')
+            n=$(git diff config/companies.yaml | grep -c '^+- slug:')   # added boards, not lines
             git add config/companies.yaml
-            git commit -m "Auto-discover: add ${n} relevant new boards"
+            git commit -m "Auto-discover: add ${n} relevant new board(s)"
             git push
           else
             echo "no new relevant boards this week"
