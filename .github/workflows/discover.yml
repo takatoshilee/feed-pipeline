@@ -1,0 +1,45 @@
+name: job-radar discover
+on:
+  schedule:
+    - cron: "0 8 * * 1"   # weekly, Monday 08:00 UTC
+  workflow_dispatch:
+    inputs:
+      max_add:
+        description: "max boards to add this run"
+        default: "40"
+
+permissions:
+  contents: write          # it commits the grown watch-list
+
+concurrency:
+  group: radar-discover
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+
+      - name: Discover relevant new boards
+        run: python -m job_radar.discover --max-add "${MAX_ADD:-40}"
+        env:
+          MAX_ADD: ${{ github.event.inputs.max_add }}
+
+      - name: Commit any additions
+        run: |
+          if ! git diff --quiet config/companies.yaml; then
+            git config user.name "job-radar-bot"
+            git config user.email "actions@github.com"
+            n=$(git diff --numstat config/companies.yaml | awk '{print $1}')
+            git add config/companies.yaml
+            git commit -m "Auto-discover: add ${n} relevant new boards"
+            git push
+          else
+            echo "no new relevant boards this week"
+          fi
