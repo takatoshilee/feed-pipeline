@@ -1,7 +1,10 @@
+from dataclasses import replace
+
 from ..models import Company, Posting
-from .base import get_json, to_dt
+from .base import get_json, strip_html, to_dt
 
 API = "https://api.smartrecruiters.com/v1/companies/{slug}/postings?limit={limit}&offset={offset}"
+DETAIL = "https://api.smartrecruiters.com/v1/companies/{slug}/postings/{id}"
 
 
 def _location(loc: dict) -> str:
@@ -39,3 +42,20 @@ async def fetch(client, company: Company, *, page_limit=5, page_size=100) -> lis
         if not payload.get("content") or (page + 1) * page_size >= total:
             break
     return out
+
+
+async def enrich(client, posting: Posting, company: Company) -> Posting:
+    """Fetch the job ad body (second call). Concatenates the text sections, since any
+    single section (e.g. jobDescription) can be empty for a given posting."""
+    pid = posting.raw.get("id")
+    if not pid:
+        return posting
+    try:
+        data = await get_json(client, DETAIL.format(slug=company.slug, id=pid))
+    except Exception:
+        return posting
+    sections = (data.get("jobAd") or {}).get("sections") or {}
+    texts = [(sections.get(k) or {}).get("text", "")
+             for k in ("jobDescription", "qualifications", "additionalInformation")]
+    desc = strip_html(" ".join(t for t in texts if t))
+    return replace(posting, description=desc) if desc else posting

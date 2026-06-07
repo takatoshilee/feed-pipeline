@@ -57,3 +57,18 @@ async def test_fetch_returns_empty_when_misconfigured():
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=FIX))) as client:
         postings = await workday.fetch(client, company, now=NOW)
     assert postings == []
+
+
+async def test_enrich_fills_description():
+    detail = {"jobPostingInfo": {"jobDescription": "&lt;p&gt;Build &lt;b&gt;AI&lt;/b&gt; systems.&lt;/p&gt;"}}
+
+    def handler(request):
+        assert "/wday/cxs/nvidia/NVIDIAExternalCareerSite/job/" in str(request.url)
+        return httpx.Response(200, json=detail)
+
+    posting = workday.parse("nvidia", "NVIDIAExternalCareerSite", BASE, FIX, NOW)[0]
+    assert posting.description == ""  # empty before enrichment
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        enriched = await workday.enrich(client, posting, COMPANY)
+    assert "Build AI systems" in enriched.description
+    assert enriched.uid == posting.uid  # identity preserved
