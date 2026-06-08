@@ -31,7 +31,10 @@ def ensure_checkbox(ws) -> None:
     DATA rows only, so flagging a job applied is a single tick. Bounding to the data rows
     matters: validation on the unbounded column expands the sheet's used-range into phantom
     blank rows. Best-effort: skipped if unsupported (tests)."""
-    col = HEADERS.index("Applied")  # 0-based for the API
+    header = ws.row_values(1) or HEADERS
+    if "Applied" not in header:
+        return
+    col = header.index("Applied")   # 0-based for the API; from the ACTUAL header
     nrows = len(ws.col_values(1))   # includes the header row
     if nrows < 2:
         return                       # no data rows yet
@@ -97,15 +100,30 @@ def existing_uids(ws) -> set:
     return set(ws.col_values(1)[1:])  # column 1 minus the header
 
 
-def _row_values(posting: Posting, score: Score, added_on: str = "") -> list:
+def _row_dict(posting: Posting, score: Score, added_on: str = "") -> dict:
     posted = posting.posted_at.date().isoformat() if posting.posted_at else ""
-    notes = visa_note(posting.location)  # flags US on-site roles that need a J-1
-    return [posting.uid, posting.company, posting.title, posting.url, score.value,
-            posting.location, posted, "New", "", "", notes, "", added_on, "FALSE"]
+    return {"uid": posting.uid, "Company": posting.company, "Role": posting.title,
+            "Link": posting.url, "Fit": score.value, "Location": posting.location,
+            "Posted": posted, "Status": "New", "Deadline": "", "Priority": "",
+            "Notes": visa_note(posting.location), "Applied on": "", "Added on": added_on,
+            "Applied": "FALSE"}
+
+
+def _row_for_header(posting: Posting, score: Score, added_on: str, header: list) -> list:
+    """Row values laid out in the SHEET's actual column order, so writes stay correct even
+    if Taka drags columns around (e.g. moves the Applied checkbox next to Role)."""
+    d = _row_dict(posting, score, added_on)
+    return [d.get(h, "") for h in header]
+
+
+def _row_values(posting: Posting, score: Score, added_on: str = "") -> list:
+    d = _row_dict(posting, score, added_on)
+    return [d[h] for h in HEADERS]
 
 
 def append_match(ws, posting: Posting, score: Score) -> None:
-    ws.append_row(_row_values(posting, score), value_input_option="USER_ENTERED")
+    header = ws.row_values(1) or HEADERS
+    ws.append_row(_row_for_header(posting, score, "", header), value_input_option="USER_ENTERED")
 
 
 def _row_for_uid(ws, uid: str):
@@ -143,6 +161,7 @@ class SheetSink:
 
     def __init__(self, ws, added_on: str | None = None):
         self.ws = ws
+        self._header = ws.row_values(1) or list(HEADERS)   # write in the sheet's real order
         self._seen = existing_uids(ws)
         self._buffer: list[list] = []
         self._added_on = added_on or date.today().isoformat()  # stamps when WE found the role
@@ -156,7 +175,7 @@ class SheetSink:
         uid is already in the Sheet or already queued this run."""
         if posting.uid in self._seen:
             return False
-        self._buffer.append(_row_values(posting, score, self._added_on))
+        self._buffer.append(_row_for_header(posting, score, self._added_on, self._header))
         self._seen.add(posting.uid)
         return True
 
