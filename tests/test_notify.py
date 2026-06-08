@@ -24,6 +24,19 @@ def test_build_embed_shape_and_color():
     assert any("Fit 90" in n for n in names)
 
 
+def test_build_embed_includes_description_snippet_and_visa_flag():
+    p = Posting(uid="x:1", ats="greenhouse", company="acme", title="SWE Intern",
+                location="San Francisco, CA",
+                url="https://j", posted_at=NOW,
+                description="<p>Build <b>backend</b> services in Python.</p> Requirements: 2nd year.")
+    e = build_embed(p, Score(80, "fit", []), Urgency.MEDIUM, None, NOW)
+    fields = {f["name"]: f["value"] for f in e["fields"]}
+    assert "About the role" in fields
+    assert "Build backend services in Python." in fields["About the role"]  # HTML stripped
+    assert "<" not in fields["About the role"]
+    assert "needs sponsored J-1" in [v for k, v in fields.items() if k == "Location"][0]  # US flag
+
+
 async def test_discord_notifier_pings_role_on_high():
     sent = {}
 
