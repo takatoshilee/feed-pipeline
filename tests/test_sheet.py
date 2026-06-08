@@ -86,6 +86,22 @@ def test_ensure_headers_leaves_populated_custom_header():
     assert ws.rows[0] == ["my", "own", "header"]  # not clobbered
 
 
+def test_ensure_headers_extends_when_trailing_columns_added():
+    old = HEADERS[:-1]  # the pre-'Added on' 12-column header
+    ws = FakeWS([old, ["greenhouse:x:1"] + [""] * (len(old) - 1)])  # one data row
+    ensure_headers(ws)
+    assert ws.rows[0] == HEADERS   # extended in place with 'Added on'
+    assert len(ws.rows) == 2       # data row untouched
+
+
+def test_sheet_sink_stamps_added_on():
+    ws = FakeWS([HEADERS])
+    sink = SheetSink(ws, added_on="2026-06-08")
+    sink.add(_posting(), Score(80, "x"))
+    sink.flush()
+    assert all_records(ws)[0]["Added on"] == "2026-06-08"
+
+
 def test_sheet_sink_dedups_against_existing_and_within_run():
     ws = FakeWS([HEADERS])
     append_match(ws, _posting(), Score(70, "old"))  # already in the sheet from a prior run

@@ -2,7 +2,7 @@ from datetime import date
 
 from job_radar.tracker import (due_soon, unapplied_strong, top_unapplied, stats, parse_date,
                               priority_rank, has_priority, must_apply, pending_count, last_active,
-                              recently_posted)
+                              recently_posted, recently_added)
 
 TODAY = date(2026, 6, 10)
 
@@ -85,6 +85,16 @@ def test_recently_posted_only_fresh_pending_newest_first():
     ]
     res = recently_posted(rows, TODAY, within_days=7)
     assert [r["uid"] for r in res] == ["a", "b"]   # newest first, only fresh + pending
+
+
+def test_recently_added_uses_added_on_and_skips_pre_feature_rows():
+    rows = [
+        row(uid="a", **{"Added on": "2026-06-09"}),                     # 1 day ago -> new
+        row(uid="b", **{"Added on": "2026-05-20"}),                     # 21 days -> too old
+        row(uid="c", **{"Added on": ""}),                              # pre-feature -> skipped
+        row(uid="d", Status="Applied", **{"Added on": "2026-06-09"}),   # applied -> excluded
+    ]
+    assert [r["uid"] for r in recently_added(rows, TODAY, within_days=7)] == ["a"]
 
 
 def test_pending_count_and_last_active():

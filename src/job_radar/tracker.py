@@ -122,14 +122,29 @@ def last_active(rows):
 
 
 def recently_posted(rows, today: date, within_days: int = 7):
-    """Pending rows whose posting is within the last within_days, newest first. Answers
-    'what's new since I last looked' for a busy stretch (most fresh roles arrived while
-    Taka was away). Rows without a known Posted date are skipped (no false positives)."""
+    """Pending rows whose posting is within the last within_days, newest first. Rows
+    without a known Posted date are skipped (no false positives)."""
     out = []
     for r in rows:
         if status(r) != PENDING:
             continue
         d = parse_date(r.get("Posted"))
+        if d is not None and 0 <= (today - d).days <= within_days:
+            out.append((d, r))
+    out.sort(key=lambda x: x[0], reverse=True)
+    return [r for _, r in out]
+
+
+def recently_added(rows, today: date, within_days: int = 7):
+    """Pending rows the radar ADDED in the last within_days (by the 'Added on' stamp),
+    newest first. This is the truest 'new since I last looked' signal: it's when we found
+    the role, not when it was posted. Rows without an Added-on date (pre-feature) are
+    skipped, so the existing backlog isn't mislabelled as new."""
+    out = []
+    for r in rows:
+        if status(r) != PENDING:
+            continue
+        d = parse_date(r.get("Added on"))
         if d is not None and 0 <= (today - d).days <= within_days:
             out.append((d, r))
     out.sort(key=lambda x: x[0], reverse=True)
