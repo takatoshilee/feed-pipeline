@@ -1,10 +1,20 @@
+import re
 from datetime import datetime
 
 import httpx
 
+from .filters import visa_note
 from .models import Company, Posting, Score, Urgency
 
 COLORS = {Urgency.HIGH: 0xE74C3C, Urgency.MEDIUM: 0xF1C40F, Urgency.LOW: 0x2ECC71}
+_TAG = re.compile(r"<[^>]+>")
+
+
+def _snippet(text: str, n: int = 320) -> str:
+    """A clean, truncated plain-text preview of a job description (HTML stripped)."""
+    t = _TAG.sub(" ", text or "").replace("&nbsp;", " ").replace("&amp;", "&")
+    t = re.sub(r"\s+", " ", t).strip()
+    return (t[: n - 1] + "…") if len(t) > n else t
 
 
 def _age(posting: Posting, now: datetime) -> str:
@@ -21,15 +31,21 @@ def _age(posting: Posting, now: datetime) -> str:
 def build_embed(posting: Posting, score: Score, urgency: Urgency,
                 company: Company | None, now: datetime) -> dict:
     tier = company.tier if company else "target"
+    visa = visa_note(posting.location)
+    loc = (posting.location or "n/a")[:200] + (f"  ⚠️ {visa}" if visa else "")
+    fields = [
+        {"name": "Company", "value": f"{posting.company} ({posting.ats})", "inline": True},
+        {"name": "Location", "value": loc[:240], "inline": True},
+        {"name": "Posted", "value": _age(posting, now), "inline": True},
+        {"name": f"Fit {score.value}/100 — why", "value": (score.reason or "n/a")[:600], "inline": False},
+    ]
+    snip = _snippet(posting.description)
+    if snip:
+        fields.append({"name": "About the role", "value": snip[:1024], "inline": False})
     embed = {
         "title": (posting.title or "(untitled)")[:240],
         "color": COLORS[urgency],
-        "fields": [
-            {"name": "Company", "value": f"{posting.company} ({posting.ats})", "inline": True},
-            {"name": "Location", "value": (posting.location or "n/a")[:200], "inline": True},
-            {"name": "Posted", "value": _age(posting, now), "inline": True},
-            {"name": f"Fit {score.value}/100", "value": (score.reason or "n/a")[:300], "inline": False},
-        ],
+        "fields": fields,
         "footer": {"text": (", ".join(score.tags) or tier)[:200]},
     }
     if posting.url:  # Discord 400s on an empty/invalid embed url; only set when present
