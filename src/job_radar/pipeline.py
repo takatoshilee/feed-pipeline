@@ -59,8 +59,12 @@ def build_provider(settings):
     heuristic = HeuristicProvider()
     if settings.llm_provider == "bedrock":
         # Bedrock auths via the AWS credential chain (env/role), not an API key, so it's
-        # available even without LLM_API_KEY.
-        primary = BedrockProvider(settings.llm_model or "anthropic.claude-3-5-haiku-20241022-v1:0")
+        # available even without LLM_API_KEY. Pass the region EXPLICITLY: in CI there's no
+        # ~/.aws/config, and boto3 doesn't reliably resolve the region from AWS_REGION alone
+        # (NoRegionError), which would silently drop every score to the heuristic.
+        region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+        primary = BedrockProvider(settings.llm_model or "anthropic.claude-3-5-haiku-20241022-v1:0",
+                                  region=region)
         return FallbackProvider(primary, heuristic)
     if not settings.llm_api_key:
         return heuristic
