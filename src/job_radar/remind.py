@@ -57,12 +57,20 @@ async def remind(ws, notifier, today: date | None = None, sheet_url: str | None 
     today = today or date.today()
     records = await asyncio.to_thread(sheet.all_records, ws)
     body = build_message(records, today, sheet_url=sheet_url)
+    sent = 0
     if body is None:
         print("remind: nothing due or pending")
-        return 0
-    await notifier.send_embed("Job tracker", body)
-    print("remind: sent reminder")
-    return 1
+    else:
+        await notifier.send_embed("Job tracker", body)
+        print("remind: sent reminder")
+        sent = 1
+    # Keep the Sheet ordered by apply-priority (best-effort; never block the reminder).
+    try:
+        n = await asyncio.to_thread(sheet.sort_rows, ws, today)
+        print(f"remind: re-sorted {n} rows by apply-priority")
+    except Exception as e:
+        print(f"remind: sort skipped ({e!r})")
+    return sent
 
 
 def _sheet_url(sheet_id: str) -> str:

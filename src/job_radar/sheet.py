@@ -6,7 +6,7 @@ from .filters import visa_note
 from .models import Posting, Score
 
 HEADERS = ["uid", "Company", "Role", "Link", "Fit", "Location", "Posted",
-           "Status", "Deadline", "Priority", "Notes", "Applied on", "Added on"]
+           "Status", "Deadline", "Priority", "Notes", "Applied on", "Added on", "Applied"]
 
 
 def _col(name: str) -> int:
@@ -22,7 +22,51 @@ def connect(creds_path: str, sheet_id: str):
         creds_path, scopes=["https://www.googleapis.com/auth/spreadsheets"])
     ws = gspread.authorize(creds).open_by_key(sheet_id).sheet1
     ensure_headers(ws)
+    ensure_checkbox(ws)
     return ws
+
+
+def ensure_checkbox(ws) -> None:
+    """Make the 'Applied' column one-click checkboxes (boolean data validation) for the
+    DATA rows only, so flagging a job applied is a single tick. Bounding to the data rows
+    matters: validation on the unbounded column expands the sheet's used-range into phantom
+    blank rows. Best-effort: skipped if unsupported (tests)."""
+    col = HEADERS.index("Applied")  # 0-based for the API
+    nrows = len(ws.col_values(1))   # includes the header row
+    if nrows < 2:
+        return                       # no data rows yet
+    try:
+        ws.spreadsheet.batch_update({"requests": [{
+            "setDataValidation": {
+                "range": {"sheetId": ws.id, "startRowIndex": 1, "endRowIndex": nrows,
+                          "startColumnIndex": col, "endColumnIndex": col + 1},
+                "rule": {"condition": {"type": "BOOLEAN"}, "showCustomUi": True},
+            }
+        }]})
+    except Exception as e:
+        print(f"sheet: could not set checkbox validation ({e!r})")
+
+
+def _a1_col(n: int) -> str:
+    s = ""
+    while n > 0:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def sort_rows(ws, today) -> int:
+    """Reorder the data rows by 'when should I apply' (tracker.apply_sort_key), preserving
+    every column including Taka's own edits. Returns the number of rows reordered."""
+    from .tracker import apply_sort_key
+    records = all_records(ws)
+    if not records:
+        return 0
+    records.sort(key=lambda r: apply_sort_key(r, today))
+    body = [[r.get(h, "") for h in HEADERS] for r in records]
+    rng = f"A2:{_a1_col(len(HEADERS))}{len(body) + 1}"
+    ws.update(range_name=rng, values=body, value_input_option="USER_ENTERED")
+    return len(body)
 
 
 def ensure_headers(ws) -> None:
@@ -54,7 +98,7 @@ def _row_values(posting: Posting, score: Score, added_on: str = "") -> list:
     posted = posting.posted_at.date().isoformat() if posting.posted_at else ""
     notes = visa_note(posting.location)  # flags US on-site roles that need a J-1
     return [posting.uid, posting.company, posting.title, posting.url, score.value,
-            posting.location, posted, "New", "", "", notes, "", added_on]
+            posting.location, posted, "New", "", "", notes, "", added_on, "FALSE"]
 
 
 def append_match(ws, posting: Posting, score: Score) -> None:

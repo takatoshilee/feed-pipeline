@@ -14,6 +14,7 @@ from .urgency import classify
 
 SCORE_CONCURRENCY = 6
 PREVIEW_CAP = 80    # max survivors to LLM-score in --preview (use --company/--limit to narrow)
+SHEET_MIN_FIT = 60  # the cron only mirrors genuinely-good matches to the Sheet (keep it curated)
 # Max survivors to score in --backfill (freshest first), bounding LLM cost. Default
 # stays under the Gemini free tier's ~200 requests/day (shared with the cron); raise
 # via the BACKFILL_CAP env var if you have a paid key.
@@ -236,10 +237,10 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
         level = classify(p, score, company, profile, now)
         if level is None:
             continue
-        # Queue real-scored matches (incl. digest-level) for the Sheet so it's the full
-        # inventory to triage; Discord stays a heads-up for the urgent ones. Skip error
+        # Mirror genuinely-good matches (>= SHEET_MIN_FIT) into the Sheet so it stays a
+        # curated, triageable list; weaker ones still reach Discord as a digest. Skip error
         # scores (e.g. an LLM 429) so a dream-tier post never lands as a bogus Fit 0 row.
-        if sheet_sink is not None and score.ok:
+        if sheet_sink is not None and score.ok and score.value >= SHEET_MIN_FIT:
             sheet_sink.add(p, score)
         if level == Urgency.LOW:
             digest.append((p, score, company))
