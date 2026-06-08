@@ -1,10 +1,12 @@
 """Google Sheet as the tracker's source of truth. The gspread/google-auth imports are
 lazy (inside connect) so the row logic below is testable with a fake worksheet."""
+from datetime import date
+
 from .filters import visa_note
 from .models import Posting, Score
 
 HEADERS = ["uid", "Company", "Role", "Link", "Fit", "Location", "Posted",
-           "Status", "Deadline", "Priority", "Notes", "Applied on"]
+           "Status", "Deadline", "Priority", "Notes", "Applied on", "Added on"]
 
 
 def _col(name: str) -> int:
@@ -26,7 +28,8 @@ def connect(creds_path: str, sheet_id: str):
 def ensure_headers(ws) -> None:
     """Make row 1 the expected header. Already correct -> nothing. Empty -> write it.
     Wrong but with no data beneath (e.g. a stray value pasted into A1) -> overwrite it.
-    Wrong but with data already under it -> leave alone, to avoid shifting columns."""
+    A prefix of HEADERS with data beneath (we ADDED trailing columns like 'Added on') ->
+    extend it in place without touching data. Any other populated header -> leave alone."""
     current = ws.row_values(1)
     if current == HEADERS:
         return
@@ -36,17 +39,22 @@ def ensure_headers(ws) -> None:
     if len(ws.col_values(1)) <= 1:  # row 1 holds something, but no data rows follow
         for i, h in enumerate(HEADERS, start=1):
             ws.update_cell(1, i, h)
+        return
+    # Has data. If we only appended new trailing columns, extend the header to match.
+    if len(current) < len(HEADERS) and HEADERS[:len(current)] == current:
+        for i in range(len(current) + 1, len(HEADERS) + 1):
+            ws.update_cell(1, i, HEADERS[i - 1])
 
 
 def existing_uids(ws) -> set:
     return set(ws.col_values(1)[1:])  # column 1 minus the header
 
 
-def _row_values(posting: Posting, score: Score) -> list:
+def _row_values(posting: Posting, score: Score, added_on: str = "") -> list:
     posted = posting.posted_at.date().isoformat() if posting.posted_at else ""
     notes = visa_note(posting.location)  # flags US on-site roles that need a J-1
     return [posting.uid, posting.company, posting.title, posting.url, score.value,
-            posting.location, posted, "New", "", "", notes, ""]
+            posting.location, posted, "New", "", "", notes, "", added_on]
 
 
 def append_match(ws, posting: Posting, score: Score) -> None:
@@ -86,10 +94,11 @@ class SheetSink:
     is already there (and dedups repeats within the run). Batching matters: the Sheets
     API caps writes at ~60/minute, so one append_rows beats dozens of append_row calls."""
 
-    def __init__(self, ws):
+    def __init__(self, ws, added_on: str | None = None):
         self.ws = ws
         self._seen = existing_uids(ws)
         self._buffer: list[list] = []
+        self._added_on = added_on or date.today().isoformat()  # stamps when WE found the role
 
     def is_tracked(self, uid: str) -> bool:
         """True if this uid is already in the Sheet (so a re-run can skip scoring it)."""
@@ -100,7 +109,7 @@ class SheetSink:
         uid is already in the Sheet or already queued this run."""
         if posting.uid in self._seen:
             return False
-        self._buffer.append(_row_values(posting, score))
+        self._buffer.append(_row_values(posting, score, self._added_on))
         self._seen.add(posting.uid)
         return True
 
