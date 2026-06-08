@@ -102,6 +102,20 @@ def test_sheet_sink_stamps_added_on():
     assert all_records(ws)[0]["Added on"] == "2026-06-08"
 
 
+def test_sheet_sink_writes_in_actual_header_order():
+    # 'Applied' moved up next to Role; writes must follow the sheet's order, not HEADERS.
+    reordered = ["uid", "Company", "Role", "Applied", "Link", "Fit", "Location", "Posted",
+                 "Status", "Deadline", "Priority", "Notes", "Applied on", "Added on"]
+    ws = FakeWS([reordered])
+    sink = SheetSink(ws, added_on="2026-06-08")
+    sink.add(_posting(), Score(88, "x"))
+    sink.flush()
+    rec = all_records(ws)[0]
+    assert rec["Company"] == "Stripe"          # values landed under the right headers
+    assert str(rec["Fit"]) == "88"
+    assert rec["Applied"] == "FALSE" and rec["Role"] == "Software Engineer Intern"
+
+
 def test_sheet_sink_dedups_against_existing_and_within_run():
     ws = FakeWS([HEADERS])
     append_match(ws, _posting(), Score(70, "old"))  # already in the sheet from a prior run
