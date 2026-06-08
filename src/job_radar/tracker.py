@@ -16,7 +16,15 @@ def fit(row) -> int:
         return 0
 
 
+def _checked(v) -> bool:
+    return str(v).strip().upper() in ("TRUE", "✓", "YES", "1")
+
+
 def status(row) -> str:
+    """Applied if the one-click 'Applied' checkbox is ticked (the easy path), else the
+    text Status (for Skip), else New."""
+    if _checked(row.get("Applied")):
+        return "Applied"
     return (row.get("Status") or PENDING).strip() or PENDING
 
 
@@ -72,6 +80,18 @@ def top_unapplied(rows, n: int = 5):
     pending = [r for r in rows if status(r) == PENDING]
     pending.sort(key=fit, reverse=True)
     return pending[:n]
+
+
+def apply_sort_key(row, today: date):
+    """Sort key for 'when should I apply' (lower sorts first). Order of importance:
+    (1) the Priority flag Taka set (must/high first), (2) an urgent deadline (due within
+    14 days jumps up), (3) the actual deadline date, (4) best fit. With nothing filled in
+    it falls back to fit, so the Sheet looks fit-sorted until he adds priorities/deadlines."""
+    d = parse_date(row.get("Deadline"))
+    dd = (d - today).days if d is not None else None
+    urgent = 0 if (dd is not None and 0 <= dd <= 14) else 1
+    deadline_order = dd if (dd is not None and dd >= 0) else 9999
+    return (priority_rank(row), urgent, deadline_order, -fit(row))
 
 
 def stats(rows) -> dict:
