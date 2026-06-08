@@ -162,6 +162,23 @@ async def test_intra_run_uid_dedup_pings_once(tmp_path, monkeypatch):
     assert len(notifier.ones) == 1  # deduped -> pinged once, not twice
 
 
+async def test_same_title_different_reqs_pings_once(tmp_path, monkeypatch):
+    a = Posting(uid="greenhouse:c:1", ats="greenhouse", company="c", title="Software Intern",
+                location="Toronto", url="u1", posted_at=NOW, description="d")
+    b = Posting(uid="greenhouse:c:2", ats="greenhouse", company="c", title="Software Intern",
+                location="Remote", url="u2", posted_at=NOW, description="d")  # same role, 2nd req
+
+    async def fake_fetch_all(companies, **kw):
+        return [a, b], []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    config = _config(tmp_path)
+    _prime_seen(config)
+    notifier = FakeNotifier()
+    await pipeline.run(config, provider=FakeProvider(value=90), notifier=notifier, now=NOW)
+    assert len(notifier.ones) == 1  # same company+title -> one ping, not one per req
+
+
 class FakeSink:
     def __init__(self, tracked=()):
         self.added = []
