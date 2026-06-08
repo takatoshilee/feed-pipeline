@@ -2,7 +2,7 @@ from datetime import date
 
 from job_radar.tracker import (due_soon, unapplied_strong, top_unapplied, stats, parse_date,
                               priority_rank, has_priority, must_apply, pending_count, last_active,
-                              recently_posted, recently_added)
+                              recently_posted, recently_added, apply_sort_key, status)
 
 TODAY = date(2026, 6, 10)
 
@@ -47,6 +47,25 @@ def test_unapplied_strong_filters_fit_status_and_freshness():
 def test_top_unapplied_excludes_applied_and_ranks_by_fit():
     rows = [row(uid="a", Fit="90"), row(uid="b", Fit="95", Status="Applied"), row(uid="c", Fit="80")]
     assert [r["uid"] for r in top_unapplied(rows, n=2)] == ["a", "c"]  # b applied -> excluded
+
+
+def test_status_reads_applied_checkbox():
+    assert status(row(uid="a", **{"Applied": "TRUE"})) == "Applied"   # ticked checkbox
+    assert status(row(uid="b", **{"Applied": "FALSE"})) == "New"
+    assert status(row(uid="c")) == "New"
+    assert status(row(uid="d", Status="Skip")) == "Skip"
+    assert status(row(uid="e", Status="New", **{"Applied": "TRUE"})) == "Applied"  # box wins
+
+
+def test_apply_sort_key_priority_then_deadline_then_fit():
+    rows = [
+        row(uid="hf", Fit="95"),                       # high fit, nothing else
+        row(uid="lf", Fit="70"),
+        row(uid="due", Fit="60", Deadline="2026-06-12"),   # TODAY=6/10 -> 2 days, urgent
+        row(uid="must", Fit="50", Priority="must"),        # priority flag wins outright
+    ]
+    rows.sort(key=lambda r: apply_sort_key(r, TODAY))
+    assert [r["uid"] for r in rows] == ["must", "due", "hf", "lf"]
 
 
 def test_stats_counts_by_status():
