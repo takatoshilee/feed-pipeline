@@ -57,14 +57,17 @@ def _a1_col(n: int) -> str:
 
 def sort_rows(ws, today) -> int:
     """Reorder the data rows by 'when should I apply' (tracker.apply_sort_key), preserving
-    every column including Taka's own edits. Returns the number of rows reordered."""
+    every column including Taka's own edits. Writes columns in the sheet's ACTUAL header
+    order (not HEADERS), so it stays correct even if he drags columns around. Returns the
+    number of rows reordered."""
     from .tracker import apply_sort_key
-    records = all_records(ws)
+    header = ws.row_values(1) or HEADERS
+    records = all_records(ws)   # keyed by the actual header row
     if not records:
         return 0
     records.sort(key=lambda r: apply_sort_key(r, today))
-    body = [[r.get(h, "") for h in HEADERS] for r in records]
-    rng = f"A2:{_a1_col(len(HEADERS))}{len(body) + 1}"
+    body = [[r.get(h, "") for h in header] for r in records]
+    rng = f"A2:{_a1_col(len(header))}{len(body) + 1}"
     ws.update(range_name=rng, values=body, value_input_option="USER_ENTERED")
     return len(body)
 
