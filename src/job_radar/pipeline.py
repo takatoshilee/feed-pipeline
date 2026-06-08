@@ -230,6 +230,7 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
 
     digest = []
     pinged = 0
+    pinged_keys = set()   # (company, title): ping a role once even if posted as several reqs
     for p, score in scored:
         company = cmap.get((p.ats, p.company))
         level = classify(p, score, company, profile, now)
@@ -243,6 +244,10 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
         if level == Urgency.LOW:
             digest.append((p, score, company))
         else:
+            key = (p.company, (p.title or "").strip().lower())
+            if key in pinged_keys:   # same role as several reqs/locations -> ping once
+                continue
+            pinged_keys.add(key)
             try:
                 await notifier.send_one(p, score, level, company, now)
                 pinged += 1
