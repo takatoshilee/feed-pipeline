@@ -1,7 +1,7 @@
 name: job-radar
 on:
   schedule:
-    - cron: "0 */6 * * *"   # light 6-hourly BACKUP; the real cadence comes from an external
+    - cron: "0 8 * * *"    # once-daily BACKUP; the real cadence comes from an external
                             # cron (cron-job.org) hitting the workflow_dispatch API, which
                             # isn't throttled like GH schedules and doesn't double-spend minutes
   workflow_dispatch: {}        # manual + external-cron trigger
