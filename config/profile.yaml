@@ -11,6 +11,15 @@ summary: >
   - WRONG TYPE (score low): full-time / permanent / "New Grad" / entry-level-career roles.
     He does not graduate until Dec 2028, so these are for ~2028-2029, not his 2027 co-op;
     only score them well if they explicitly accept current students or co-op candidates.
+  - WRONG LEVEL (score low): roles that REQUIRE a completed or in-progress Master's, PhD,
+    or other graduate degree. He is a BACHELOR's student and will not have a Master's.
+    Roles open to Bachelor's students (even if they also welcome Master's/PhD applicants)
+    are perfectly fine.
+  - CAN'T DO (score low): roles requiring US citizenship, a US security clearance,
+    permanent residency, "US person" status, or that state "no visa sponsorship" / "must be
+    authorized to work in the US without sponsorship". He is an international student and
+    cannot meet these. A US role that does NOT say this is still fine (he'd just need
+    sponsorship); only the explicit citizenship/clearance/no-sponsorship ones are out.
   Strong in Python, TypeScript/React, full-stack web, and LLM application development; some
   applied ML. Based in Toronto; open to remote within Canada/North America and to US on-site
   (would need visa sponsorship, fine to apply anyway). Penalize senior/staff/manager roles
