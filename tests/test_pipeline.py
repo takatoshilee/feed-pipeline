@@ -304,13 +304,13 @@ class ErrorProvider:
         return Score(0, "LLM error: 429", ok=False)
 
 
-async def test_error_score_pings_dream_but_is_not_written_to_sheet(tmp_path, monkeypatch):
+async def test_error_score_neither_pings_nor_writes(tmp_path, monkeypatch):
     async def fake_fetch_all(companies, **kw):
         return _postings(), []
 
     monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
-    # Dream tier: classify() routes to HIGH regardless of score, so without the ok-gate
-    # a failed score would land in the Sheet as a bogus Fit 0 row.
+    # Dream tier no longer forces a ping; an errored score (ok=False, value 0) should be
+    # silently skipped: not in the Sheet and not pinged, just surfaced in score_errors.
     profile = Profile(summary="s", title_include=["intern"], title_exclude=["senior"],
                       locations_allow=["toronto"], locations_block=[], freshness_days=21)
     companies = [Company(slug="c", ats="greenhouse", tier="dream")]
@@ -323,6 +323,6 @@ async def test_error_score_pings_dream_but_is_not_written_to_sheet(tmp_path, mon
     notifier = FakeNotifier()
     stats = await pipeline.run(config, provider=ErrorProvider(), notifier=notifier,
                                sheet_sink=sink, now=NOW)
-    assert sink.added == []             # error score never written, even for a dream company
+    assert sink.added == []             # error score never written
     assert stats["score_errors"] == 1   # the failure is surfaced in stats, not silent
-    assert len(notifier.ones) == 1      # dream-tier still pings Discord as a heads-up
+    assert notifier.ones == []          # and a bad-fit/errored dream role no longer pings

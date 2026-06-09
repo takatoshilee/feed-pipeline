@@ -16,8 +16,11 @@ def _p(posted=NOW):
                    url="u", posted_at=posted, description="d")
 
 
-def test_dream_always_high():
-    assert classify(_p(), Score(10, "r"), DREAM, PROFILE, NOW) == Urgency.HIGH
+def test_dream_is_score_based_not_forced():
+    # dream no longer overrides the score: a weak-fit role at a dream company does NOT notify
+    assert classify(_p(), Score(10, "r"), DREAM, PROFILE, NOW) is None
+    # but a strong-fit dream role pings like any other
+    assert classify(_p(NOW), Score(85, "r"), DREAM, PROFILE, NOW) == Urgency.HIGH
 
 
 def test_high_when_fresh_and_high_score():

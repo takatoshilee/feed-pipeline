@@ -175,7 +175,11 @@ locations_block:
   - pune
 
 freshness_days: 21
-ping_threshold: 65
-digest_threshold: 50
-high_score: 80
+# Discord pings only for genuinely strong matches (Sonnet scores good 2027 intern/co-op
+# roles ~78-92). Everything 60+ still goes to the Sheet + the daily digest; this just keeps
+# the real-time pings high-signal. digest_threshold == ping_threshold disables the noisy
+# per-run digest (the once-a-day reminder is the summary).
+ping_threshold: 78
+digest_threshold: 78
+high_score: 82
 high_fresh_hours: 2
