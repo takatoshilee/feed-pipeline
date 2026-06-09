@@ -3,14 +3,16 @@ summary: >
   graduating December 2028. He is a STUDENT seeking an INTERNSHIP or 12-16 month CO-OP
   work term that STARTS IN 2027 (around May 2027, running through Aug 2028); after it he
   returns to university for his final year. Scoring rules:
-  - GOOD: internship / co-op / industrial-placement / student work-term roles for 2027,
-    or with no stated year/season.
-  - WRONG TIMING (score low however good the role is): any 2026 start — Summer 2026,
-    Fall 2026, Winter 2026, or "New Grad 2026" — he is committed to research and classes
-    through all of 2026.
-  - WRONG TYPE (score low): full-time / permanent / "New Grad" / entry-level-career roles.
-    He does not graduate until Dec 2028, so these are for ~2028-2029, not his 2027 co-op;
-    only score them well if they explicitly accept current students or co-op candidates.
+  - HARD GATE — must be a STUDENT role: the posting MUST be an internship, co-op, industrial
+    placement, or otherwise explicitly open to current students/undergraduates (its title or
+    description should say intern / co-op / student / "currently pursuing a degree"). If a
+    posting shows NO such signal — e.g. a plain "Software Engineer", "Software Engineer,
+    Backend", or "Data Scientist" with no intern/co-op/student language — treat it as a
+    FULL-TIME role he is NOT eligible for and score it 30 or below, however well the skills
+    or company match. He is a 2nd-year undergrad and can only take student work terms.
+  - WRONG TIMING (score low): any 2026 start — Summer 2026, Fall 2026, Winter 2026, or
+    "New Grad 2026"; he is committed to research and classes through all of 2026. GOOD is
+    2027 timing, or an intern/co-op role with no stated year.
   - WRONG LEVEL (score low): roles that REQUIRE a completed or in-progress Master's, PhD,
     or other graduate degree. He is a BACHELOR's student and will not have a Master's.
     Roles open to Bachelor's students (even if they also welcome Master's/PhD applicants)
