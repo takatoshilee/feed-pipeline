@@ -649,9 +649,6 @@ companies:
 - slug: doximity
   ats: greenhouse
   tier: target
-- slug: headway
-  ats: greenhouse
-  tier: target
 - slug: garnerhealth
   ats: greenhouse
   tier: target
