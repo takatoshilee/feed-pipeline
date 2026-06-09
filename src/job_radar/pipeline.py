@@ -234,14 +234,14 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
     pinged_keys = set()   # (company, title): ping a role once even if posted as several reqs
     for p, score in scored:
         company = cmap.get((p.ats, p.company))
+        # Sheet gets every genuinely-good match (>= SHEET_MIN_FIT), INDEPENDENT of whether
+        # it's ping-worthy, so it stays the full triage list even with a high ping bar. Skip
+        # error scores (e.g. an LLM 429) so nothing lands as a bogus Fit 0 row.
+        if sheet_sink is not None and score.ok and score.value >= SHEET_MIN_FIT:
+            sheet_sink.add(p, score)
         level = classify(p, score, company, profile, now)
         if level is None:
             continue
-        # Mirror genuinely-good matches (>= SHEET_MIN_FIT) into the Sheet so it stays a
-        # curated, triageable list; weaker ones still reach Discord as a digest. Skip error
-        # scores (e.g. an LLM 429) so a dream-tier post never lands as a bogus Fit 0 row.
-        if sheet_sink is not None and score.ok and score.value >= SHEET_MIN_FIT:
-            sheet_sink.add(p, score)
         if level == Urgency.LOW:
             digest.append((p, score, company))
         else:
