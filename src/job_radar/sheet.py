@@ -5,8 +5,9 @@ from datetime import date
 from .filters import visa_note
 from .models import Posting, Score
 
-HEADERS = ["uid", "Company", "Role", "Link", "Fit", "Location", "Posted",
-           "Status", "Deadline", "Priority", "Notes", "Applied on", "Added on", "Applied"]
+HEADERS = ["uid", "Company", "Role", "Fit", "Resume", "Term", "Why", "Link", "Location",
+           "Posted", "Status", "Deadline", "Priority", "Notes", "Applied on", "Added on",
+           "Applied"]
 
 
 def _col(name: str) -> int:
@@ -103,7 +104,8 @@ def existing_uids(ws) -> set:
 def _row_dict(posting: Posting, score: Score, added_on: str = "") -> dict:
     posted = posting.posted_at.date().isoformat() if posting.posted_at else ""
     return {"uid": posting.uid, "Company": posting.company, "Role": posting.title,
-            "Link": posting.url, "Fit": score.value, "Location": posting.location,
+            "Fit": score.value, "Resume": score.resume.upper(), "Term": score.term,
+            "Why": score.reason, "Link": posting.url, "Location": posting.location,
             "Posted": posted, "Status": "New", "Deadline": "", "Priority": "",
             "Notes": visa_note(posting.location), "Applied on": "", "Added on": added_on,
             "Applied": "FALSE"}
