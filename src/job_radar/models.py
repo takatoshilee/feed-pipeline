@@ -37,6 +37,8 @@ class Score:
     reason: str
     tags: list[str] = field(default_factory=list, compare=False)
     ok: bool = field(default=True, compare=False)  # False => scoring errored (value is not a real fit)
+    resume: str = field(default="", compare=False)  # which resume to use: "swe" | "ai" | ""
+    term: str = field(default="", compare=False)    # work-term timing as stated in the posting
 
 
 @dataclass(frozen=True)

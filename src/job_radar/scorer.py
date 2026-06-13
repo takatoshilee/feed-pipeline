@@ -24,8 +24,14 @@ INSTRUCTIONS = (
     "stretches that still use those strengths (e.g. a data or full-stack role at an AI "
     "company). Be calibrated: most postings should land 30-70; reserve 80+ for genuinely "
     "strong, realistic matches.\n"
-    "Respond as JSON {score, reason, tags}; reason = one short sentence naming the key fit "
-    "or gap; tags = a few lowercase labels."
+    "Respond as JSON {score, reason, tags, resume, term}; reason = one short sentence naming "
+    "the key fit or gap; tags = a few lowercase labels; resume = which of the candidate's two "
+    "resumes to use for this role: \"ai\" for AI / ML / research / data-science / ML-"
+    "engineering roles, or \"swe\" for general software-engineering / backend / full-stack / "
+    "developer roles; term = the work-term timing EXACTLY as the posting states it — season "
+    "+ year and start/end or length if given (e.g. \"Summer 2027 (May-Aug)\", \"Fall 2027, "
+    "4 months\", \"16-month, May 2027-Aug 2028\"); use \"not stated\" if the posting gives no "
+    "dates/season."
 )
 
 
@@ -86,7 +92,10 @@ def _coerce_score(obj) -> Score:
     val = max(0, min(100, val))
     reason = str(obj.get("reason", ""))[:300]
     tags = [str(t) for t in obj.get("tags", []) if isinstance(t, (str, int))][:8]
-    return Score(value=val, reason=reason, tags=tags)
+    resume = str(obj.get("resume", "")).strip().lower()
+    resume = resume if resume in ("ai", "swe") else ""
+    term = str(obj.get("term", "")).strip()[:80]
+    return Score(value=val, reason=reason, tags=tags, resume=resume, term=term)
 
 
 # --- Gemini (REST) ---
@@ -98,8 +107,10 @@ GEMINI_SCHEMA = {
         "score": {"type": "INTEGER"},
         "reason": {"type": "STRING"},
         "tags": {"type": "ARRAY", "items": {"type": "STRING"}},
+        "resume": {"type": "STRING"},
+        "term": {"type": "STRING"},
     },
-    "required": ["score", "reason", "tags"],
+    "required": ["score", "reason", "tags", "resume", "term"],
 }
 
 
