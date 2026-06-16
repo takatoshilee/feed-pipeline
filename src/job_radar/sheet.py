@@ -5,9 +5,13 @@ from datetime import date
 from .filters import visa_note
 from .models import Posting, Score
 
-HEADERS = ["uid", "Company", "Role", "Fit", "Resume", "Term", "Why", "Link", "Location",
-           "Posted", "Status", "Deadline", "Priority", "Notes", "Applied on", "Added on",
-           "Applied"]
+# Column order matches how Taka uses the tracker: Applied (the one-click checkbox) sits
+# right after Role so he can tick a job the moment he reads it, then the "is this worth it
+# and when" cluster (Fit / Resume / Term / Why), then logistics. _row_for_header and
+# all_records read the LIVE header, so writes stay correct even if he drags columns around.
+HEADERS = ["uid", "Company", "Role", "Applied", "Fit", "Resume", "Term", "Why", "Link",
+           "Location", "Posted", "Status", "Deadline", "Priority", "Notes", "Applied on",
+           "Added on"]
 
 
 def _col(name: str) -> int:
