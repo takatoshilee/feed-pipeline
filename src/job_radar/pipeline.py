@@ -15,10 +15,12 @@ from .urgency import classify
 SCORE_CONCURRENCY = 6
 PREVIEW_CAP = 80    # max survivors to LLM-score in --preview (use --company/--limit to narrow)
 SHEET_MIN_FIT = 60  # the cron only mirrors genuinely-good matches to the Sheet (keep it curated)
-# Max survivors to score in --backfill (freshest first), bounding LLM cost. Default
-# stays under the Gemini free tier's ~200 requests/day (shared with the cron); raise
-# via the BACKFILL_CAP env var if you have a paid key.
-BACKFILL_CAP = int(os.environ.get("BACKFILL_CAP", "120"))
+# Max survivors to LLM-score in --backfill, bounding cost. The cron's run() is UNCAPPED
+# (it only scores the small new-posting delta each poll); this cap bounds only the one-time
+# deep sweep of the whole standing backlog. Scoring runs on Bedrock (paid, no tiny daily
+# quota), so it's set wide to reach past the obvious top tier into the niche/startup roles
+# the heuristic pre-rank buries. Raise further via the BACKFILL_CAP env var.
+BACKFILL_CAP = int(os.environ.get("BACKFILL_CAP", "300"))
 
 
 def _company_map(companies):
