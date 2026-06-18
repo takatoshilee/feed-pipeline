@@ -84,14 +84,17 @@ def top_unapplied(rows, n: int = 5):
 
 def apply_sort_key(row, today: date):
     """Sort key for 'when should I apply' (lower sorts first). Order of importance:
-    (1) the Priority flag Taka set (must/high first), (2) an urgent deadline (due within
-    14 days jumps up), (3) the actual deadline date, (4) best fit. With nothing filled in
-    it falls back to fit, so the Sheet looks fit-sorted until he adds priorities/deadlines."""
+    (0) still actionable: Applied/Closed/Skip rows sink to the bottom so the top of the
+    Sheet is always the live to-apply list, (1) the Priority flag Taka set (must/high first),
+    (2) an urgent deadline (due within 14 days jumps up), (3) the actual deadline date,
+    (4) best fit. With nothing filled in it falls back to fit, so the Sheet looks fit-sorted
+    until he adds priorities/deadlines."""
+    done = 0 if status(row) == PENDING else 1   # New=live (top); Applied/Closed/Skip=done (bottom)
     d = parse_date(row.get("Deadline"))
     dd = (d - today).days if d is not None else None
     urgent = 0 if (dd is not None and 0 <= dd <= 14) else 1
     deadline_order = dd if (dd is not None and dd >= 0) else 9999
-    return (priority_rank(row), urgent, deadline_order, -fit(row))
+    return (done, priority_rank(row), urgent, deadline_order, -fit(row))
 
 
 def stats(rows) -> dict:

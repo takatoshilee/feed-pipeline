@@ -28,13 +28,21 @@ from .scorer import heuristic_score
 from .seed import merge
 from .sources import ADAPTERS
 
-RELEVANCE_MIN = 60   # a discovered board must have a role scoring at least this (heuristic)
+RELEVANCE_MIN = 60   # strict gate: a discovered board must have a role scoring at least this
 
+# Internship/new-grad list repos we harvest company ATS slugs from. These are DISCOVERY
+# sources only (we then poll the boards directly). All URLs below were probed live; dead
+# ones are skipped gracefully, so it's safe to keep a wide set. Mining new-grad lists too
+# is intentional: the COMPANY is what we want to watch (it'll post co-op/intern roles), even
+# if the new-grad role itself gets filtered out.
 LIST_SOURCES = [
     "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/.github/scripts/listings.json",
-    "https://raw.githubusercontent.com/vanshb03/Summer2027-Internships/dev/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/SimplifyJobs/Summer2025-Internships/dev/.github/scripts/listings.json",
     "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json",
-    "https://raw.githubusercontent.com/cvrve/Summer2026-Internships/main/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/vanshb03/Summer2027-Internships/dev/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/vanshb03/Summer2026-Internships/dev/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/cvrve/New-Grad-2025/main/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/Ouckah/Summer2025-Internships/main/.github/scripts/listings.json",
 ]
 PATTERNS = [
     ("greenhouse", re.compile(r"(?:job-)?boards\.greenhouse\.io/(?:embed/job_app\?for=)?([a-z0-9_-]+)", re.I)),
@@ -73,10 +81,9 @@ async def mine_candidates(client) -> dict:
 
 
 async def is_relevant(client, company: Company, profile) -> bool:
-    """True if the board currently has a posting that passes the rules AND scores at least
-    RELEVANCE_MIN on the free heuristic. The heuristic gate keeps out companies whose only
-    'match' is a marginal rules-passing role (e.g. a generic non-tech 'analyst'), so the
-    watch-list grows with genuinely promising boards, not noise."""
+    """STRICT gate: True only if the board currently has a posting that passes the rules AND
+    scores at least RELEVANCE_MIN on the free heuristic. Keeps out companies whose only
+    'match' is a marginal rules-passing role. Used when discovering with --strict."""
     adapter = ADAPTERS.get(company.ats)
     if adapter is None:
         return False
@@ -88,8 +95,35 @@ async def is_relevant(client, company: Company, profile) -> bool:
                for p in posts)
 
 
+def _title_ok(title: str, profile) -> bool:
+    """A tech / early-career title: matches an include keyword and no exclude keyword.
+    Location and freshness are deliberately ignored here (see board_qualifies)."""
+    t = (title or "").lower()
+    if any(x in t for x in profile.title_exclude):
+        return False
+    return (not profile.title_include) or any(x in t for x in profile.title_include)
+
+
+async def board_qualifies(client, company: Company, profile) -> bool:
+    """WIDE gate (the default for the weekly run): True if the board has ANY role with a
+    tech/early-career title, regardless of that role's location, age, or heuristic score.
+    We're only deciding whether to POLL this company from now on; a tech employer hiring
+    today will post co-op/intern roles later, and the per-poll Sonnet score is the real
+    relevance filter. This casts the widest sensible net (tech employers), while still
+    skipping pure non-tech boards (a retailer with only store-manager roles) and dead ones."""
+    adapter = ADAPTERS.get(company.ats)
+    if adapter is None:
+        return False
+    try:
+        posts = await adapter.fetch(client, company)
+    except Exception:
+        return False
+    return any(_title_ok(p.title, profile) for p in posts)
+
+
 async def discover(companies_path="config/companies.yaml", profile_path="config/profile.yaml",
-                   *, max_add=40, max_probe=400, client=None):
+                   *, max_add=40, max_probe=400, client=None, gate=None):
+    gate = gate or is_relevant   # default strict; the weekly run passes board_qualifies (wide)
     profile = load_profile(profile_path)
     data = yaml.safe_load(Path(companies_path).read_text()) or {"companies": []}
     existing = data.get("companies", [])
@@ -107,7 +141,7 @@ async def discover(companies_path="config/companies.yaml", profile_path="config/
 
         async def check(slug, ats):
             async with sem:
-                ok = await is_relevant(client, Company(slug=slug, ats=ats), profile)
+                ok = await gate(client, Company(slug=slug, ats=ats), profile)
                 return (slug, ats) if ok else None
 
         relevant = [r for r in await asyncio.gather(*[check(s, a) for s, a in pool]) if r]
@@ -129,13 +163,17 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="job_radar.discover")
     ap.add_argument("--companies", default="config/companies.yaml")
     ap.add_argument("--profile", default="config/profile.yaml")
-    ap.add_argument("--max-add", type=int, default=40)
-    ap.add_argument("--max-probe", type=int, default=400)
+    ap.add_argument("--max-add", type=int, default=80)
+    ap.add_argument("--max-probe", type=int, default=800)
+    ap.add_argument("--strict", action="store_true",
+                    help="only add boards with a role scoring >=60 (default: wide gate, any "
+                         "board with a tech/early-career-titled role)")
     ap.add_argument("--dry-run", action="store_true", help="report only; don't write the yaml")
     args = ap.parse_args(argv)
 
+    gate = is_relevant if args.strict else board_qualifies
     merged, added, data = asyncio.run(discover(
-        args.companies, args.profile, max_add=args.max_add, max_probe=args.max_probe))
+        args.companies, args.profile, max_add=args.max_add, max_probe=args.max_probe, gate=gate))
     if added and not args.dry_run:
         data["companies"] = merged
         Path(args.companies).write_text(yaml.safe_dump(data, sort_keys=False))

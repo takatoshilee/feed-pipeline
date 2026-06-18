@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from job_radar.models import Posting, Score
 from job_radar.sheet import (HEADERS, ensure_headers, append_match, set_status,
-                             set_deadline, existing_uids, all_records, SheetSink)
+                             set_deadline, existing_uids, all_records, mark_closed, SheetSink)
 
 
 class FakeWS:
@@ -38,6 +38,17 @@ class FakeWS:
         hdr = self.rows[0]
         return [dict(zip(hdr, [(r[i] if i < len(r) else "") for i in range(len(hdr))]))
                 for r in self.rows[1:]]
+
+    def batch_update(self, data, value_input_option=None):
+        import re
+        for item in data:
+            rng = item["range"].split("!")[-1]
+            m = re.match(r"([A-Z]+)(\d+)", rng)
+            col = 0
+            for ch in m.group(1):
+                col = col * 26 + (ord(ch) - 64)
+            row = int(m.group(2))
+            self.update_cell(row, col, item["values"][0][0])
 
 
 def _posting():
@@ -132,3 +143,27 @@ def test_sheet_sink_dedups_against_existing_and_within_run():
     assert sink.flush() == 1   # one batched write
     assert sink.flush() == 0   # buffer drained, no-op
     assert existing_uids(ws) == {"greenhouse:stripe:1", "lever:cohere:9"}
+
+
+def _track(ws, uid, ats, company):
+    append_match(ws, Posting(uid=uid, ats=ats, company=company, title="SWE Intern",
+                 location="Toronto", url="u", posted_at=None, description="d"), Score(80, "x"))
+
+
+def test_mark_closed_flags_only_vanished_roles_on_polled_boards():
+    ws = FakeWS([HEADERS])
+    _track(ws, "greenhouse:stripe:1", "greenhouse", "stripe")   # still open
+    _track(ws, "greenhouse:stripe:2", "greenhouse", "stripe")   # vanished from a polled board
+    _track(ws, "lever:cohere:9", "lever", "cohere")             # vanished but board errored
+    set_status(ws, "greenhouse:stripe:1", "Applied", applied_on="2026-06-10")  # already acted on
+
+    # stripe fetched OK (only :1 still listed); cohere failed this run -> not in ok set.
+    n = mark_closed(ws, open_uids={"greenhouse:stripe:1"}, ok_board_slugs={"stripe"})
+
+    recs = {r["uid"]: r for r in all_records(ws)}
+    assert n == 1
+    assert recs["greenhouse:stripe:2"]["Status"] == "Closed"   # gone from a board we polled OK
+    assert recs["greenhouse:stripe:1"]["Status"] == "Applied"  # acted-on row never overwritten
+    assert recs["lever:cohere:9"]["Status"] == "New"           # board errored -> left alone
+
+    assert mark_closed(ws, {"greenhouse:stripe:1"}, {"stripe"}) == 0  # idempotent: nothing new
