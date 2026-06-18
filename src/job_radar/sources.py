@@ -28,7 +28,10 @@ async def _fetch_one(client, sem, company, errors):
             return []
 
 
-async def fetch_all(companies, *, concurrency=30, client=None):
+async def fetch_all(companies, *, concurrency=45, client=None):
+    # 45 (up from 30) keeps the wall-time safe now that the watch-list includes ~1k slow,
+    # paginated Workday boards. Network-bound, so higher concurrency scales down the time;
+    # the ATS APIs tolerate it (a rare 429 just drops that board to the next poll).
     sem = asyncio.Semaphore(concurrency)
     errors: list[tuple[str, str]] = []
     owns = client is None
