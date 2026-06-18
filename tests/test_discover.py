@@ -34,6 +34,22 @@ async def test_is_relevant_requires_a_promising_role(monkeypatch):
     assert await disc.is_relevant(None, Company(slug="g", ats="greenhouse"), prof) is False
 
 
+async def test_board_qualifies_is_wider_than_is_relevant(monkeypatch):
+    prof = _profile()   # include=[intern, software], exclude=[senior]
+    # A full-time 'Software Developer' is below the strict heuristic gate, but it IS a tech
+    # employer, so the WIDE gate keeps the board (it may post a co-op later).
+    monkeypatch.setitem(disc.ADAPTERS, "greenhouse", _FakeAdapter([_post("Software Developer")]))
+    g = Company(slug="g", ats="greenhouse")
+    assert await disc.board_qualifies(None, g, prof) is True
+    assert await disc.is_relevant(None, g, prof) is False
+    # Only a senior (excluded) role -> not kept by either gate.
+    monkeypatch.setitem(disc.ADAPTERS, "greenhouse", _FakeAdapter([_post("Senior Software Engineer")]))
+    assert await disc.board_qualifies(None, g, prof) is False
+    # Pure non-tech board -> skipped by the wide gate too.
+    monkeypatch.setitem(disc.ADAPTERS, "greenhouse", _FakeAdapter([_post("Marketing Coordinator")]))
+    assert await disc.board_qualifies(None, g, prof) is False
+
+
 def _cfg(tmp_path):
     cfg = tmp_path / "c.yaml"
     cfg.write_text("companies:\n  - {slug: existing, ats: greenhouse, tier: target}\n")

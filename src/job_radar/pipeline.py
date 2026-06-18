@@ -198,6 +198,11 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
     seen = SeenStore(settings.seen_path).load()
     postings, errors = await fetch_all(companies)
     postings = _dedup_by_uid(postings)   # a job can repeat across paginated pages
+    # For closed-role detection: every uid currently open, and the boards that fetched OK
+    # this run (so a transient board error can't wrongly mark its roles Closed). Captured
+    # here, before `errors` accrues later notify/sheet failures.
+    open_uids = {p.uid for p in postings}
+    fetch_failed = {slug for slug, _ in errors}
     new = [p for p in postings if seen.is_new(p)]
 
     # Cold start (or explicit --prime): with no memory yet, prime the seen-set silently
@@ -260,11 +265,20 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
     # One batched write (the Sheets API caps per-row writes at ~60/min). A Sheets hiccup
     # is recorded but can't abort the run.
     tracked = 0
+    closed = 0
     if sheet_sink is not None:
         try:
             tracked = await asyncio.to_thread(sheet_sink.flush)
         except Exception as e:
             errors.append(("sheet", f"flush: {e!r}"))
+        # Flag tracked roles that have vanished from a board we polled OK as Closed, so the
+        # tracker reflects what's still applyable. Only boards that fetched cleanly this run.
+        from . import sheet
+        ok_boards = {c.slug for c in companies} - fetch_failed
+        try:
+            closed = await asyncio.to_thread(sheet.mark_closed, sheet_sink.ws, open_uids, ok_boards)
+        except Exception as e:
+            errors.append(("sheet", f"mark_closed: {e!r}"))
     try:
         await notifier.send_digest(digest, now)
     except Exception as e:
@@ -280,7 +294,7 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
     stats = {
         "boards": len(companies), "postings": len(postings), "errors": len(errors),
         "new": len(new), "primed": primed_new, "survivors": len(survivors), "pinged": pinged,
-        "digest": len(digest), "tracked": tracked,
+        "digest": len(digest), "tracked": tracked, "closed": closed,
         "score_errors": sum(1 for _, s in scored if not s.ok),
     }
     print("job-radar run:", stats)
