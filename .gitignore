@@ -8,3 +8,4 @@ google-creds.json
 *.egg-info/
 .pytest_cache/
 scripts/mined_seed.csv
+_*.py
