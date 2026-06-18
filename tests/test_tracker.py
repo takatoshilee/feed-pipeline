@@ -14,6 +14,15 @@ def row(**kw):
     return base
 
 
+def test_apply_sort_demotes_applied_and_closed_to_bottom():
+    live = row(Fit="60", Status="New")
+    applied = row(Fit="99", Status="Applied")     # high fit but already done
+    closed = row(Fit="95", Status="Closed")        # role no longer open
+    ordered = sorted([applied, closed, live], key=lambda r: apply_sort_key(r, TODAY))
+    assert ordered[0] is live          # the live to-apply row floats to the top
+    assert {id(ordered[1]), id(ordered[2])} == {id(applied), id(closed)}  # both sink below live
+
+
 def test_parse_date_tolerates_formats():
     assert parse_date("2026-11-14") == date(2026, 11, 14)
     assert parse_date("Nov 14, 2026") == date(2026, 11, 14)

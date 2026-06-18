@@ -159,6 +159,37 @@ def all_records(ws) -> list:
     return ws.get_all_records()
 
 
+def mark_closed(ws, open_uids: set, ok_board_slugs: set) -> int:
+    """Flag tracked roles that have DISAPPEARED from a board we polled OK this run as
+    Status='Closed', so Taka doesn't waste time on a dead link when he sits down to apply.
+
+    Conservative on purpose (false 'Closed' is worse than a missed one):
+    - only touches a role whose board (the slug in its uid: 'ats:slug:nativeid') is in
+      ok_board_slugs, i.e. that board actually fetched successfully this run. A transient
+      board error -> we skip its roles rather than wrongly close them.
+    - never overrides a row Taka has acted on (Applied checkbox, or Status Applied/Closed/Skip).
+    Returns the number newly marked Closed. Header-aware (writes the real Status column)."""
+    header = ws.row_values(1) or HEADERS
+    if "Status" not in header or "uid" not in header:
+        return 0
+    scol = header.index("Status")
+    updates = []
+    for i, r in enumerate(ws.get_all_records(), start=2):   # row 2 = first data row
+        uid = str(r.get("uid", "")).strip()
+        if not uid or ":" not in uid:
+            continue
+        applied = str(r.get("Applied", "")).strip().upper() in ("TRUE", "✓", "YES", "1")
+        cur = (str(r.get("Status", "")).strip() or "New")
+        if applied or cur in ("Applied", "Closed", "Skip"):
+            continue
+        slug = uid.split(":")[1]
+        if slug in ok_board_slugs and uid not in open_uids:
+            updates.append({"range": f"{_a1_col(scol + 1)}{i}", "values": [["Closed"]]})
+    if updates:
+        ws.batch_update(updates, value_input_option="USER_ENTERED")
+    return len(updates)
+
+
 class SheetSink:
     """Buffers new matches and writes them to the tracker Sheet in one batched call on
     flush(). Snapshots existing uids at construction so a run never re-adds a row that
