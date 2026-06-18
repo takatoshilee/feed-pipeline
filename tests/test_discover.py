@@ -66,11 +66,26 @@ def test_extract_pulls_ats_slug_from_urls():
     assert disc._extract("https://example.com/careers") is None
 
 
+def test_scan_extracts_workday_host_and_site():
+    found = {}
+    disc._scan("apply: https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/x", found)
+    assert found[("workday", "nvidia")] == {
+        "slug": "nvidia", "ats": "workday", "wd_host": "wd5", "wd_site": "NVIDIAExternalCareerSite"}
+
+
+def test_scan_extracts_smartrecruiters_preserving_case():
+    found = {}
+    disc._scan("https://jobs.smartrecruiters.com/Square/743-intern", found)
+    assert found[("smartrecruiters", "square")]["slug"] == "Square"   # API id is case-sensitive
+
+
 async def test_discover_adds_only_relevant_new_companies(tmp_path, monkeypatch):
     cfg, prof = _cfg(tmp_path)
 
     async def fake_mine(client):
-        return {"existing": "greenhouse", "good": "ashby", "bad": "lever"}
+        return {("greenhouse", "existing"): {"slug": "existing", "ats": "greenhouse"},
+                ("ashby", "good"): {"slug": "good", "ats": "ashby"},
+                ("lever", "bad"): {"slug": "bad", "ats": "lever"}}
 
     async def fake_relevant(client, company, profile):
         return company.slug == "good"   # only 'good' currently has a matching role
@@ -91,7 +106,7 @@ async def test_discover_respects_max_add(tmp_path, monkeypatch):
     cfg, prof = _cfg(tmp_path)
 
     async def fake_mine(client):
-        return {f"co{i}": "ashby" for i in range(10)}
+        return {("ashby", f"co{i}"): {"slug": f"co{i}", "ats": "ashby"} for i in range(10)}
 
     async def fake_relevant(client, company, profile):
         return True   # all relevant

@@ -36,6 +36,7 @@ RELEVANCE_MIN = 60   # strict gate: a discovered board must have a role scoring 
 # is intentional: the COMPANY is what we want to watch (it'll post co-op/intern roles), even
 # if the new-grad role itself gets filtered out.
 LIST_SOURCES = [
+    # listings.json repos (scanned as raw text below, so JSON or markdown both work)
     "https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/.github/scripts/listings.json",
     "https://raw.githubusercontent.com/SimplifyJobs/Summer2025-Internships/dev/.github/scripts/listings.json",
     "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json",
@@ -43,40 +44,69 @@ LIST_SOURCES = [
     "https://raw.githubusercontent.com/vanshb03/Summer2026-Internships/dev/.github/scripts/listings.json",
     "https://raw.githubusercontent.com/cvrve/New-Grad-2025/main/.github/scripts/listings.json",
     "https://raw.githubusercontent.com/Ouckah/Summer2025-Internships/main/.github/scripts/listings.json",
+    # README-based repos (Canadian + AI/ML focused); the text scan reads these fine too
+    "https://raw.githubusercontent.com/speedyapply/2026-SWE-College-Jobs/main/README.md",
+    "https://raw.githubusercontent.com/speedyapply/2026-AI-College-Jobs/main/README.md",
+    "https://raw.githubusercontent.com/negarprh/Canadian-Tech-Internships-2026/main/README.md",
 ]
 PATTERNS = [
     ("greenhouse", re.compile(r"(?:job-)?boards\.greenhouse\.io/(?:embed/job_app\?for=)?([a-z0-9_-]+)", re.I)),
     ("lever", re.compile(r"jobs\.(?:eu\.)?lever\.co/([a-z0-9_-]+)", re.I)),
     ("ashby", re.compile(r"jobs\.ashbyhq\.com/([a-z0-9_-]+)", re.I)),
+    ("smartrecruiters", re.compile(r"(?:jobs|careers)\.smartrecruiters\.com/([A-Za-z0-9_-]+)", re.I)),
 ]
-JUNK = {"embed", "job_app", "for", "www", "jobs", "careers", "o"}
+# Workday needs three coordinates (tenant.host.myworkdayjobs.com/<locale?>/<site>), not just
+# a slug, so it gets its own parser. An optional locale segment like 'en-US/' is skipped.
+WORKDAY = re.compile(
+    r"([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[A-Za-z]{2}-[A-Za-z]{2}/)?([A-Za-z0-9_-]+)", re.I)
+JUNK = {"embed", "job_app", "for", "www", "jobs", "careers", "o", "en", "en-us", "search"}
+# SmartRecruiters company IDs are case-sensitive (Square, Visa); others are lowercase.
+_CASE_SENSITIVE = {"smartrecruiters"}
 
 
 def _extract(url):
+    """Single-URL -> (ats, slug) for the simple ATSs (used in tests). Workday is excluded
+    here since it needs host + site; see _scan."""
     for ats, pat in PATTERNS:
         m = pat.search(url or "")
         if m:
-            slug = m.group(1).lower()
-            if slug not in JUNK and len(slug) > 1:
+            raw = m.group(1)
+            slug = raw if ats in _CASE_SENSITIVE else raw.lower()
+            if slug.lower() not in JUNK and len(slug) > 1:
                 return ats, slug
     return None
 
 
+def _scan(text: str, found: dict) -> None:
+    """Scan raw text (a JSON listings file or a markdown README) for every ATS apply URL,
+    adding {(ats, slug_lower): record} to `found`. Greenhouse/Lever/Ashby/SmartRecruiters
+    need only a slug; Workday also captures host + site so its CXS endpoint can be built."""
+    for ats, pat in PATTERNS:
+        for m in pat.finditer(text):
+            raw = m.group(1)
+            slug = raw if ats in _CASE_SENSITIVE else raw.lower()
+            if slug.lower() not in JUNK and len(slug) > 1:
+                found.setdefault((ats, slug.lower()), {"slug": slug, "ats": ats})
+    for m in WORKDAY.finditer(text):
+        tenant, host, site = m.group(1).lower(), m.group(2).lower(), m.group(3)
+        if tenant not in JUNK and len(tenant) > 1 and site and site.lower() not in JUNK:
+            found.setdefault(("workday", tenant),
+                             {"slug": tenant, "ats": "workday", "wd_host": host, "wd_site": site})
+
+
 async def mine_candidates(client) -> dict:
-    """slug -> ats, harvested from the list repos' apply URLs."""
+    """(ats, slug_lower) -> record, harvested from the list/README repos. Scans the raw
+    response TEXT (not just parsed JSON), so JSON listings and markdown READMEs both work
+    and every supported ATS (incl. Workday's host/site) is picked up."""
     found = {}
     for src in LIST_SOURCES:
         try:
             r = await client.get(src)
             if r.status_code != 200:
                 continue
-            data = r.json()
+            _scan(r.text, found)
         except Exception:
             continue
-        for e in (data if isinstance(data, list) else data.get("listings", [])):
-            hit = _extract(e.get("url") or e.get("apply_link") or "")
-            if hit:
-                found.setdefault(hit[1], hit[0])
     return found
 
 
@@ -132,30 +162,33 @@ async def discover(companies_path="config/companies.yaml", profile_path="config/
     owns = client is None
     client = client or httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True)
     try:
-        cands = {s: a for s, a in (await mine_candidates(client)).items() if s.lower() not in have}
-        pool = list(cands.items())
-        random.shuffle(pool)          # probe a different slice each week so coverage spreads
-        pool = pool[:max_probe]
+        mined = await mine_candidates(client)            # {(ats, slug_lower): record}
+        cands = [rec for (ats, sl), rec in mined.items() if sl not in have]
+        random.shuffle(cands)         # probe a different slice each week so coverage spreads
+        cands = cands[:max_probe]
 
         sem = asyncio.Semaphore(16)   # be polite to the ATS APIs
 
-        async def check(slug, ats):
+        async def check(rec):
             async with sem:
-                ok = await gate(client, Company(slug=slug, ats=ats), profile)
-                return (slug, ats) if ok else None
+                co = Company(slug=rec["slug"], ats=rec["ats"],
+                             wd_host=rec.get("wd_host"), wd_site=rec.get("wd_site"))
+                return rec if await gate(client, co, profile) else None
 
-        relevant = [r for r in await asyncio.gather(*[check(s, a) for s, a in pool]) if r]
+        relevant = [r for r in await asyncio.gather(*[check(r) for r in cands]) if r]
     finally:
         if owns:
             await client.aclose()
 
     add = relevant[:max_add]
-    lines = [f"{slug},{ats},target" for slug, ats in add]
+    # Workday rows carry host+site (5-field seed line); the others are just slug,ats,tier.
+    lines = [(f"{r['slug']},workday,target,{r['wd_host']},{r['wd_site']}" if r["ats"] == "workday"
+              else f"{r['slug']},{r['ats']},target") for r in add]
     merged, added = merge(existing, lines)
-    print(f"discover: {len(cands)} new candidates, probed {len(pool)}, "
+    print(f"discover: {len(mined)} mined, probed {len(cands)}, "
           f"{len(relevant)} relevant, adding {added}")
-    for slug, ats in add:
-        print(f"  + {ats:11} {slug}")
+    for r in add:
+        print(f"  + {r['ats']:15} {r['slug']}")
     return merged, added, data
 
 
