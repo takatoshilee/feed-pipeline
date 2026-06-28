@@ -2,7 +2,7 @@ import asyncio
 
 import httpx
 
-from .adapters import ashby, greenhouse, lever, smartrecruiters, workday
+from .adapters import ashby, greenhouse, lever, simplify, smartrecruiters, workday
 from .adapters.base import TIMEOUT
 from .models import Company, Posting
 
@@ -12,6 +12,7 @@ ADAPTERS = {
     "ashby": ashby,
     "workday": workday,
     "smartrecruiters": smartrecruiters,
+    "simplify": simplify,
 }
 
 

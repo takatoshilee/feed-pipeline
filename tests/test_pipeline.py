@@ -112,7 +112,7 @@ async def test_preview_is_read_only_and_ranks(tmp_path, monkeypatch):
 
     monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
     config = _config(tmp_path)
-    stats = await pipeline.preview(config, provider=FakeProvider(value=90, reason="r"))
+    stats = await pipeline.preview(config, provider=FakeProvider(value=90, reason="r"), now=NOW)
 
     assert stats["survivors"] == 1   # only the intern passes rules
     assert stats["scored"] == 1
