@@ -48,6 +48,11 @@ LIST_SOURCES = [
     "https://raw.githubusercontent.com/speedyapply/2026-SWE-College-Jobs/main/README.md",
     "https://raw.githubusercontent.com/speedyapply/2026-AI-College-Jobs/main/README.md",
     "https://raw.githubusercontent.com/negarprh/Canadian-Tech-Internships-2026/main/README.md",
+    # Canada-specific crowdsourced lists (verified live + carrying extractable ATS apply URLs)
+    "https://raw.githubusercontent.com/hanzili/canada_sde_intern_position/main/README.md",
+    "https://raw.githubusercontent.com/hanzili/canada_sde_junior_new_grad_position/main/README.md",
+    "https://raw.githubusercontent.com/jenndryden/Canadian-Tech-Internships-and-New-Grad-2025/main/README.md",
+    "https://raw.githubusercontent.com/isaiahiruoha/Canadian-Tech-And-Business-Internships-Summer-2025/main/README.md",
 ]
 PATTERNS = [
     ("greenhouse", re.compile(r"(?:job-)?boards\.greenhouse\.io/(?:embed/job_app\?for=)?([a-z0-9_-]+)", re.I)),
