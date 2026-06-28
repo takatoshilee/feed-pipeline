@@ -1,0 +1,51 @@
+name: backfill
+on:
+  workflow_dispatch: {}   # one-off, manual: load current open matches into the Sheet
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20   # fetch all boards + LLM-score up to BACKFILL_CAP survivors
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - run: pip install -e ".[sheet,bedrock]"
+
+      - name: Write Google credentials
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          if [ -n "$GOOGLE_CREDENTIALS" ]; then
+            printf '%s' "$GOOGLE_CREDENTIALS" > google-creds.json
+            echo "wrote google-creds.json"
+          else
+            echo "ERROR: GOOGLE_CREDENTIALS secret missing; backfill writes to the Sheet" && exit 1
+          fi
+
+      # No seen-set restore and no Discord: backfill never pings and never touches state.
+      # It rules-filters the current backlog (reaching back --backfill-days), LLM-scores the
+      # heuristic-top BACKFILL_CAP, and writes matches >= min-fit into the Sheet (dedup-safe).
+      - name: Backfill the Sheet
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_CREDENTIALS_PATH: google-creds.json
+          BACKFILL_CAP: "500"   # one-time load: reach past the obvious top tier into niche roles
+        run: |
+          set -o pipefail
+          python -m job_radar --backfill | tee backfill.log
+          { echo '```'; tail -4 backfill.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
