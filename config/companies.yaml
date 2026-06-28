@@ -10065,3 +10065,6 @@ companies:
   tier: target
   wd_host: wd3
   wd_site: external_careers
+- slug: simplify
+  ats: simplify
+  tier: target
