@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 from dataclasses import replace
 from datetime import datetime, timezone
 
@@ -27,15 +28,39 @@ def _company_map(companies):
     return {(c.ats, c.slug): c for c in companies}
 
 
+_URL_TAIL = re.compile(r"[?#].*$")
+
+
+def _norm_url(url):
+    """Normalize a posting URL for cross-source dedup: drop scheme, leading www.,
+    query/fragment, and a trailing slash. Catches the same job arriving from both a
+    direct ATS board and the SimplifyJobs feed (whose url IS the board's apply link)."""
+    if not url:
+        return ""
+    u = re.sub(r"^https?://", "", url.strip().lower())
+    if u.startswith("www."):
+        u = u[4:]
+    return _URL_TAIL.sub("", u).rstrip("/")
+
+
 def _dedup_by_uid(postings):
-    """Drop duplicate postings (same uid) within one poll, preserving order.
-    A job can appear twice across paginated pages of one board."""
+    """Drop duplicate postings within one poll, preserving order (first wins). Two
+    cases: (1) the same uid repeats across paginated pages of one board; (2) the same
+    job arrives from both a direct ATS board AND the SimplifyJobs feed, caught by
+    normalized URL. Direct boards precede 'simplify' in the watch-list, so the richer
+    direct posting (real company, description) wins the URL collision."""
     seen_uids = set()
+    seen_urls = set()
     out = []
     for p in postings:
         if p.uid in seen_uids:
             continue
+        nurl = _norm_url(p.url)
+        if nurl and nurl in seen_urls:
+            continue
         seen_uids.add(p.uid)
+        if nurl:
+            seen_urls.add(nurl)
         out.append(p)
     return out
 

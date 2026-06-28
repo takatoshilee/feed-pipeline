@@ -120,6 +120,26 @@ async def test_preview_is_read_only_and_ranks(tmp_path, monkeypatch):
     assert not os.path.exists(config.settings.seen_path)  # read-only: no state written
 
 
+def test_dedup_collapses_same_job_across_sources_by_url():
+    from job_radar.models import Posting
+    # Same job from a direct board and from the SimplifyJobs feed (query string differs).
+    direct = Posting(uid="greenhouse:later:1", ats="greenhouse", company="later",
+                     title="Data Co-op", location="Toronto",
+                     url="https://job-boards.greenhouse.io/later/jobs/1",
+                     posted_at=None, description="real desc")
+    feed = Posting(uid="simplify:simplify:uuid", ats="simplify", company="simplify",
+                   title="Later: Data Co-op", location="Toronto",
+                   url="https://job-boards.greenhouse.io/later/jobs/1?utm=simplify",
+                   posted_at=None, description="")
+    out = pipeline._dedup_by_uid([direct, feed])
+    assert len(out) == 1 and out[0].uid == "greenhouse:later:1"  # direct board wins
+    # distinct jobs (different urls) are both kept
+    other = Posting(uid="simplify:simplify:u2", ats="simplify", company="simplify",
+                    title="Acme: SWE", location="Remote", url="https://acme.com/jobs/9",
+                    posted_at=None, description="")
+    assert len(pipeline._dedup_by_uid([direct, other])) == 2
+
+
 class RaisingNotifier:
     async def send_one(self, *a):
         raise RuntimeError("simulated webhook 429")
