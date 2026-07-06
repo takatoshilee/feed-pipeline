@@ -59,12 +59,19 @@ PATTERNS = [
     ("lever", re.compile(r"jobs\.(?:eu\.)?lever\.co/([a-z0-9_-]+)", re.I)),
     ("ashby", re.compile(r"jobs\.ashbyhq\.com/([a-z0-9_-]+)", re.I)),
     ("smartrecruiters", re.compile(r"(?:jobs|careers)\.smartrecruiters\.com/([A-Za-z0-9_-]+)", re.I)),
+    # Workable: first path segment after apply.workable.com is the account slug (the
+    # '/j/<code>' shortlink form captures 'j', which JUNK drops).
+    ("workable", re.compile(r"apply\.workable\.com/([a-z0-9][a-z0-9-]+)", re.I)),
 ]
 # Workday needs three coordinates (tenant.host.myworkdayjobs.com/<locale?>/<site>), not just
 # a slug, so it gets its own parser. An optional locale segment like 'en-US/' is skipped.
 WORKDAY = re.compile(
     r"([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[A-Za-z]{2}-[A-Za-z]{2}/)?([A-Za-z0-9_-]+)", re.I)
-JUNK = {"embed", "job_app", "for", "www", "jobs", "careers", "o", "en", "en-us", "search"}
+# Oracle Recruiting Cloud needs a host code (e.g. 'cva.fa.us1') + a site number (e.g. 'CX_3');
+# host is stored as the slug, site as wd_site. Its own parser, like Workday.
+ORACLE = re.compile(
+    r"([a-z0-9]+\.fa\.[a-z0-9]+)\.oraclecloud\.com/hcmUI/CandidateExperience/[a-z]+/sites/([A-Za-z0-9_]+)", re.I)
+JUNK = {"embed", "job_app", "for", "www", "jobs", "careers", "o", "en", "en-us", "search", "j"}
 # SmartRecruiters company IDs are case-sensitive (Square, Visa); others are lowercase.
 _CASE_SENSITIVE = {"smartrecruiters"}
 
@@ -97,6 +104,11 @@ def _scan(text: str, found: dict) -> None:
         if tenant not in JUNK and len(tenant) > 1 and site and site.lower() not in JUNK:
             found.setdefault(("workday", tenant),
                              {"slug": tenant, "ats": "workday", "wd_host": host, "wd_site": site})
+    for m in ORACLE.finditer(text):
+        host, site = m.group(1).lower(), m.group(2)
+        if len(host) > 1 and site and site.lower() not in JUNK:
+            found.setdefault(("oracle", host),
+                             {"slug": host, "ats": "oracle", "wd_site": site})
 
 
 async def mine_candidates(client) -> dict:
@@ -186,9 +198,14 @@ async def discover(companies_path="config/companies.yaml", profile_path="config/
             await client.aclose()
 
     add = relevant[:max_add]
-    # Workday rows carry host+site (5-field seed line); the others are just slug,ats,tier.
-    lines = [(f"{r['slug']},workday,target,{r['wd_host']},{r['wd_site']}" if r["ats"] == "workday"
-              else f"{r['slug']},{r['ats']},target") for r in add]
+    # Workday rows carry host+site, Oracle rows carry a site; the others are just slug,ats,tier.
+    def _line(r):
+        if r["ats"] == "workday":
+            return f"{r['slug']},workday,target,{r['wd_host']},{r['wd_site']}"
+        if r["ats"] == "oracle":
+            return f"{r['slug']},oracle,target,{r['wd_site']}"
+        return f"{r['slug']},{r['ats']},target"
+    lines = [_line(r) for r in add]
     merged, added = merge(existing, lines)
     print(f"discover: {len(mined)} mined, probed {len(cands)}, "
           f"{len(relevant)} relevant, adding {added}")

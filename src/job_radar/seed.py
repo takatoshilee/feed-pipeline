@@ -3,16 +3,18 @@
 Run: python -m job_radar.seed <list.csv> [config/companies.yaml]
 
 Each line: ``slug,ats[,tier]`` (comma or tab separated). Workday rows need two
-more fields: ``slug,workday,tier,wd_host,wd_site``. Lines starting with ``#``
-are ignored. Entries are deduped against what's already in the YAML, so this is
-safe to run repeatedly against community-maintained slug dumps.
+more fields: ``slug,workday,tier,wd_host,wd_site``. Oracle rows need one more:
+``slug,oracle,tier,site`` (slug is the Fusion host code, e.g. "cva.fa.us1"; the
+site number, e.g. "CX_3", is stored in wd_site). Lines starting with ``#`` are
+ignored. Entries are deduped against what's already in the YAML, so this is safe
+to run repeatedly against community-maintained slug dumps.
 """
 import sys
 from pathlib import Path
 
 import yaml
 
-VALID_ATS = {"greenhouse", "lever", "ashby", "workday", "smartrecruiters"}
+VALID_ATS = {"greenhouse", "lever", "ashby", "workday", "smartrecruiters", "workable", "oracle"}
 
 
 def parse_line(line: str) -> dict | None:
@@ -35,6 +37,10 @@ def parse_line(line: str) -> dict | None:
         if len(parts) < 5 or not parts[3] or not parts[4]:
             return None  # workday needs non-empty wd_host + wd_site
         rec["wd_host"], rec["wd_site"] = parts[3], parts[4]
+    elif ats == "oracle":
+        if len(parts) < 4 or not parts[3]:
+            return None  # oracle needs a non-empty site number (stored in wd_site)
+        rec["wd_site"] = parts[3]
     return rec
 
 
