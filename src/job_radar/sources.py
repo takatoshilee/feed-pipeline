@@ -2,7 +2,8 @@ import asyncio
 
 import httpx
 
-from .adapters import ashby, greenhouse, lever, simplify, smartrecruiters, workday
+from .adapters import (ashby, greenhouse, lever, oracle, simplify, smartrecruiters,
+                       workable, workday)
 from .adapters.base import TIMEOUT
 from .models import Company, Posting
 
@@ -13,6 +14,8 @@ ADAPTERS = {
     "workday": workday,
     "smartrecruiters": smartrecruiters,
     "simplify": simplify,
+    "workable": workable,
+    "oracle": oracle,
 }
 
 
@@ -49,7 +52,7 @@ async def fetch_all(companies, *, concurrency=45, client=None):
 
 
 # Adapters that expose enrich() to fetch a full description via a second call.
-ENRICHERS = {"workday", "smartrecruiters"}
+ENRICHERS = {"workday", "smartrecruiters", "oracle"}
 
 
 async def enrich_postings(postings, cmap, *, concurrency=10, client=None):
