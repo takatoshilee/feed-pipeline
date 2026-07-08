@@ -6,10 +6,13 @@ profile, and pings a Discord channel with color-coded, urgency-tagged embeds.
 Runs free on GitHub Actions cron. Polling the ATS APIs directly means new reqs
 are seen within minutes of going live, **upstream of LinkedIn/Indeed aggregators**.
 
-Currently watching **300+ live boards** (incl. RBC/CIBC/BMO/Sun Life/TD early-talent
-boards for Canadian co-op recruiting, big tech, fintech, and a deep bench of niche/YC
-startups: AI infra, dev tools, robotics, defense). Grow the list freely with `seed` +
-`validate`; dead slugs are skipped, and newly-added boards prime silently (no flood).
+Currently watching **300+ live boards** across big tech, fintech, and a deep
+bench of niche/YC startups (AI infra, dev tools, robotics). The live
+watch-list and scoring profile are **private config** (they encode my
+personal targeting); `config/companies.example.yaml` and
+`config/profile.example.yaml` show the shape, and CI fetches the real ones
+at runtime from a private repo. Grow your own list with `seed` + `validate`;
+dead slugs are skipped, and newly-added boards prime silently (no flood).
 
 ## Quick start (local, no secrets needed)
 
@@ -17,9 +20,11 @@ startups: AI infra, dev tools, robotics, defense). Grow the list freely with `se
 python3.12 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 pytest -q                       # run the test suite
+cp config/companies.example.yaml config/companies.yaml   # then make them yours
+cp config/profile.example.yaml config/profile.yaml
 python scripts/smoke.py         # hit one real board per ATS
-python -m job_radar --preview --company cibc   # see what would surface from one board
-python -m job_radar --dry-run --limit 5        # full pipeline, console output, 5 boards
+python -m job_radar --preview --company openai   # see what would surface from one board
+python -m job_radar --dry-run --limit 5          # full pipeline, console output, 5 boards
 ```
 
 ## CLI (`python -m job_radar`)

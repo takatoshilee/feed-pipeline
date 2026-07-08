@@ -1,0 +1,36 @@
+# Example watch-list showing the shape (real entries, all five ATSs).
+#
+# The live list (300+ boards, grown weekly by discover.yml) lives in a
+# private config repo and is fetched at runtime in CI; it stays private
+# because it encodes my personal job-hunt targeting.
+#
+# To run locally: copy this file to config/companies.yaml, then grow it:
+#   python -m job_radar.seed your_seed.csv
+#   python -m job_radar.validate --prune
+#
+# tier: dream | target | watch  (weights the heuristic ranking)
+companies:
+- slug: openai
+  ats: ashby
+  tier: dream
+- slug: cohere
+  ats: ashby
+  tier: dream
+- slug: stripe
+  ats: greenhouse
+  tier: target
+- slug: vercel
+  ats: greenhouse
+  tier: target
+- slug: mistral
+  ats: lever
+  tier: dream
+- slug: spotify
+  ats: lever
+  tier: target
+- slug: Shopify
+  ats: smartrecruiters
+  tier: target
+- slug: nvidia
+  ats: workday
+  tier: dream

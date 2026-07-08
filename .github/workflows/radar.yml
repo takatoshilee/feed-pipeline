@@ -19,6 +19,20 @@ jobs:
     timeout-minutes: 14   # never bleed into the next 15-min cron window (queue serializes runs)
     steps:
       - uses: actions/checkout@v4
+
+      # The live watch-list + scoring profile are private (they're my job-hunt
+      # targeting). Fetched at runtime; config/*.example.yaml shows the shape.
+      - name: Fetch private config
+        uses: actions/checkout@v4
+        with:
+          repository: takatoshilee/job-radar-config
+          ssh-key: ${{ secrets.CONFIG_DEPLOY_KEY }}
+          path: .private-config
+      - name: Install private config
+        run: |
+          cp .private-config/companies.yaml config/companies.yaml
+          cp .private-config/profile.yaml config/profile.yaml
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
