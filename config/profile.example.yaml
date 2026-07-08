@@ -1,0 +1,46 @@
+# Example scoring profile showing the shape.
+#
+# The real one lives in a private config repo (it describes my personal
+# eligibility, timing, and location constraints in detail, and it is the
+# prompt the LLM scores every posting against).
+#
+# To run locally: copy to config/profile.yaml and make it yours. The more
+# specific the summary, the better the LLM's fit scores.
+summary: >
+  Third-year Computer Science student seeking a summer internship or a
+  12-16 month co-op starting in 2027. Scoring rules:
+  - HARD GATE: the posting must be an internship/co-op/student role. A plain
+    "Software Engineer" with no student language is a full-time role I am not
+    eligible for; score it 30 or below regardless of fit.
+  - TIMING: 2027 starts are good; 2026-or-earlier starts are bad.
+  - Strong in Python, TypeScript/React, full-stack web, and LLM application
+    development. Penalize senior/staff roles and 3+ years-of-experience asks.
+
+title_include:
+  - intern
+  - co-op
+  - student
+  - software
+  - engineer
+
+title_exclude:
+  - senior
+  - staff
+  - principal
+  - manager
+  - phd
+
+locations_allow:
+  - toronto
+  - canada
+  - remote
+
+locations_block:
+  - emea
+  - apac
+
+freshness_days: 21
+ping_threshold: 78     # discord pings only above this LLM score
+digest_threshold: 78
+high_score: 82         # "urgent" styling in the embed
+high_fresh_hours: 2

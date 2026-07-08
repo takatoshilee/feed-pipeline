@@ -9,7 +9,8 @@ on:
         default: "40"
 
 permissions:
-  contents: write          # it commits the grown watch-list
+  contents: read           # the grown watch-list is committed to the private
+                           # config repo (via its deploy key), not this one
 
 concurrency:
   group: radar-discover
@@ -21,6 +22,18 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+
+      - name: Fetch private config
+        uses: actions/checkout@v4
+        with:
+          repository: takatoshilee/job-radar-config
+          ssh-key: ${{ secrets.CONFIG_DEPLOY_KEY }}
+          path: .private-config
+      - name: Install private config
+        run: |
+          cp .private-config/companies.yaml config/companies.yaml
+          cp .private-config/profile.yaml config/profile.yaml
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -31,13 +44,15 @@ jobs:
         env:
           MAX_ADD: ${{ github.event.inputs.max_add }}
 
-      - name: Commit any additions
+      - name: Commit any additions (to the private config repo)
         run: |
-          if ! git diff --quiet config/companies.yaml; then
+          if ! git diff --quiet --no-index .private-config/companies.yaml config/companies.yaml; then
+            n=$(git diff --no-index .private-config/companies.yaml config/companies.yaml | grep -c '^+- slug:' || true)
+            cp config/companies.yaml .private-config/companies.yaml
+            cd .private-config
             git config user.name "job-radar-bot"
             git config user.email "actions@github.com"
-            n=$(git diff config/companies.yaml | grep -c '^+- slug:')   # added boards, not lines
-            git add config/companies.yaml
+            git add companies.yaml
             git commit -m "Auto-discover: add ${n} relevant new board(s)"
             git push
           else

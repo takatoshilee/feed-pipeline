@@ -11,6 +11,18 @@ jobs:
     timeout-minutes: 20   # fetch all boards + LLM-score up to BACKFILL_CAP survivors
     steps:
       - uses: actions/checkout@v4
+
+      - name: Fetch private config
+        uses: actions/checkout@v4
+        with:
+          repository: takatoshilee/job-radar-config
+          ssh-key: ${{ secrets.CONFIG_DEPLOY_KEY }}
+          path: .private-config
+      - name: Install private config
+        run: |
+          cp .private-config/companies.yaml config/companies.yaml
+          cp .private-config/profile.yaml config/profile.yaml
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
