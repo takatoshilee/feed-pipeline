@@ -53,11 +53,26 @@ def test_parse_null_safe():
     assert simplify.parse([]) == []
 
 
-async def test_fetch_uses_client():
+async def test_fetch_pulls_all_feeds_and_dedupes():
+    calls = []
+
     def handler(request):
-        assert "SimplifyJobs" in str(request.url)
+        calls.append(str(request.url))
+        return httpx.Response(200, json=LISTINGS)   # same listing id from every feed
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        postings = await simplify.fetch(client, Company(slug="simplify", ats="simplify"))
+    assert len(calls) == len(simplify.FEEDS)        # every season feed polled
+    assert len(postings) == 1                        # same id across feeds -> deduped
+
+
+async def test_fetch_survives_a_missing_feed():
+    # SimplifyJobs' 2027 repo doesn't exist yet: its feed 404s. The others still serve.
+    def handler(request):
+        if "SimplifyJobs/Summer2027" in str(request.url):
+            return httpx.Response(404)
         return httpx.Response(200, json=LISTINGS)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         postings = await simplify.fetch(client, Company(slug="simplify", ats="simplify"))
-    assert len(postings) == 1
+    assert len(postings) == 1                        # dead feed skipped, source still alive
