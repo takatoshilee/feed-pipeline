@@ -1,4 +1,4 @@
-"""SimplifyJobs feed: github.com/SimplifyJobs/Summer2026-Internships.
+"""Simplify-style internship list feeds (SimplifyJobs + community forks), all seasons.
 
 One bulk source (~16k listings, ~1.3k active) spanning many companies, including
 ones not on our per-ATS watch-list. Modelled as a single pseudo-company (slug
@@ -16,8 +16,18 @@ from datetime import datetime, timezone
 from ..models import Company, Posting
 from .base import get_json
 
-FEED = ("https://raw.githubusercontent.com/SimplifyJobs/"
-        "Summer2026-Internships/dev/.github/scripts/listings.json")
+# All season feeds we pull, newest season first (first occurrence of an id wins the
+# cross-feed dedupe). SimplifyJobs hasn't created its Summer2027 repo yet — that URL
+# 404s today and is skipped gracefully by fetch(); it starts working the day they ship
+# it. vanshb03's community fork is where 2027 postings accumulate in the meantime.
+FEEDS = (
+    "https://raw.githubusercontent.com/SimplifyJobs/"
+    "Summer2027-Internships/dev/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/vanshb03/"
+    "Summer2027-Internships/dev/.github/scripts/listings.json",
+    "https://raw.githubusercontent.com/SimplifyJobs/"
+    "Summer2026-Internships/dev/.github/scripts/listings.json",
+)
 
 # Degree tokens a 2nd/3rd-year bachelor's student can't realistically meet.
 _GRAD_ONLY = ("phd", "ph.d", "master", "mba", "doctor")
@@ -72,5 +82,19 @@ def parse(payload) -> list[Posting]:
 
 
 async def fetch(client, company: Company) -> list[Posting]:
-    payload = await get_json(client, FEED)
-    return parse(payload)
+    """Pull every season feed, skipping any that are down/missing (the SimplifyJobs
+    2027 repo doesn't exist yet), and dedupe by listing id across feeds, first feed
+    (newest season) wins. One dead feed never blanks the whole source."""
+    out: list[Posting] = []
+    seen: set[str] = set()
+    for feed in FEEDS:
+        try:
+            payload = await get_json(client, feed)
+        except Exception:
+            continue
+        for p in parse(payload):
+            if p.uid in seen:
+                continue
+            seen.add(p.uid)
+            out.append(p)
+    return out
