@@ -304,6 +304,11 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
             closed = await asyncio.to_thread(sheet.mark_closed, sheet_sink.ws, open_uids, ok_boards)
         except Exception as e:
             errors.append(("sheet", f"mark_closed: {e!r}"))
+        # Auto-date the Applied checkbox: tick is all Taka does; the poll records when.
+        try:
+            await asyncio.to_thread(sheet.stamp_applied, sheet_sink.ws)
+        except Exception as e:
+            errors.append(("sheet", f"stamp_applied: {e!r}"))
     try:
         await notifier.send_digest(digest, now)
     except Exception as e:
