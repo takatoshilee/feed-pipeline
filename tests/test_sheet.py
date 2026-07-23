@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from job_radar.models import Posting, Score
 from job_radar.sheet import (HEADERS, ensure_headers, append_match, set_status,
-                             set_deadline, existing_uids, all_records, mark_closed, SheetSink)
+                             set_deadline, existing_uids, all_records, mark_closed, stamp_applied, SheetSink)
 
 
 class FakeWS:
@@ -167,3 +167,22 @@ def test_mark_closed_flags_only_vanished_roles_on_polled_boards():
     assert recs["lever:cohere:9"]["Status"] == "New"           # board errored -> left alone
 
     assert mark_closed(ws, {"greenhouse:stripe:1"}, {"stripe"}) == 0  # idempotent: nothing new
+
+
+def test_stamp_applied_dates_ticked_rows_once():
+    hdr = ["uid", "Company", "Role", "Applied", "Applied on"]
+    ws = FakeWS([hdr,
+                 ["a:b:1", "X", "SWE Intern", "TRUE", ""],           # ticked, no date -> stamp
+                 ["a:b:2", "Y", "ML Intern", "TRUE", "2026-07-01"],  # already dated -> untouched
+                 ["a:b:3", "Z", "Data Intern", "", ""]])             # unticked -> untouched
+    n = stamp_applied(ws, today="2026-07-23")
+    assert n == 1
+    recs = ws.get_all_records()
+    assert recs[0]["Applied on"] == "2026-07-23"
+    assert recs[1]["Applied on"] == "2026-07-01"   # first-seen date preserved
+    assert recs[2]["Applied on"] == ""
+
+
+def test_stamp_applied_missing_columns_is_noop():
+    ws = FakeWS([["uid", "Company"], ["a:b:1", "X"]])
+    assert stamp_applied(ws) == 0

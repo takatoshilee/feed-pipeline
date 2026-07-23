@@ -190,6 +190,26 @@ def mark_closed(ws, open_uids: set, ok_board_slugs: set) -> int:
     return len(updates)
 
 
+def stamp_applied(ws, today: str | None = None) -> int:
+    """Auto-fill 'Applied on' for rows whose Applied checkbox is ticked but whose date
+    cell is still empty, so ticking the box is the ONLY thing Taka has to do; the next
+    poll (<=15 min later) records when. Never overwrites an existing date, so the stamp
+    stays the FIRST day the tick was seen. Header-aware; returns rows stamped."""
+    header = ws.row_values(1) or HEADERS
+    if "Applied" not in header or "Applied on" not in header:
+        return 0
+    dcol = header.index("Applied on")
+    today = today or date.today().isoformat()
+    updates = []
+    for i, r in enumerate(ws.get_all_records(), start=2):   # row 2 = first data row
+        ticked = str(r.get("Applied", "")).strip().upper() in ("TRUE", "✓", "YES", "1")
+        if ticked and not str(r.get("Applied on", "")).strip():
+            updates.append({"range": f"{_a1_col(dcol + 1)}{i}", "values": [[today]]})
+    if updates:
+        ws.batch_update(updates, value_input_option="USER_ENTERED")
+    return len(updates)
+
+
 class SheetSink:
     """Buffers new matches and writes them to the tracker Sheet in one batched call on
     flush(). Snapshots existing uids at construction so a run never re-adds a row that
