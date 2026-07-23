@@ -76,8 +76,8 @@ def unapplied_strong(rows, today: date, min_fit: int = 80, older_than_days: int 
 
 
 def top_unapplied(rows, n: int = 5):
-    """The n best pending (unapplied) rows by fit, for /top when time is short."""
-    pending = [r for r in rows if status(r) == PENDING]
+    """The n best ACTIONABLE pending rows by fit (wrong-term rows excluded)."""
+    pending = [r for r in rows if status(r) == PENDING and not wrong_term(r)]
     pending.sort(key=fit, reverse=True)
     return pending[:n]
 
@@ -97,20 +97,26 @@ def apply_sort_key(row, today: date):
     return (done, wrong_term(row), priority_rank(row), urgent, deadline_order, -fit(row))
 
 
-# Work terms Taka cannot take (he recruits for Summer 2027 onwards; Winter 2027 is a
-# class term). Rows whose Term names ONLY these sink below viable/undated ones.
-_BAD_TERM_TOKENS = ("2024", "2025", "2026", "winter 2027")
+# Work terms Taka cannot take: anything starting before May 2027 (he is in classes
+# through April 2027). Bad-term rows sink in the sort, never ping, and stay out of
+# the pending counts; the Sheet keeps them (amber) as a safety net.
+_BAD_TERM_TOKENS = ("2024", "2025", "2026", "winter 2027", "spring 2027")
+_BAD_2027 = ("winter 2027", "spring 2027")
+
+
+def bad_term_text(term) -> bool:
+    """True if a stated work term starts before Summer 2027. Undated / 'not stated'
+    counts as viable, early postings usually just don't print the season."""
+    t = (term or "").strip().lower()
+    if not t or "not stated" in t:
+        return False
+    if ("2027" in t or "2028" in t) and not any(b in t for b in _BAD_2027):
+        return False
+    return any(tok in t for tok in _BAD_TERM_TOKENS)
 
 
 def wrong_term(row) -> int:
-    """1 if the posting's stated work term is pre-Summer-2027 (he can't take it), else 0.
-    Undated / 'not stated' terms count as viable, the season is usually just unstated."""
-    t = (row.get("Term") or "").strip().lower()
-    if not t or "not stated" in t:
-        return 0
-    if ("2027" in t or "2028" in t) and "winter 2027" not in t:
-        return 0
-    return 1 if any(tok in t for tok in _BAD_TERM_TOKENS) else 0
+    return 1 if bad_term_text(row.get("Term")) else 0
 
 
 def stats(rows) -> dict:
@@ -149,7 +155,8 @@ def must_apply(rows):
 
 
 def pending_count(rows) -> int:
-    return sum(1 for r in rows if status(r) == PENDING)
+    """Actionable pending only: wrong-term rows don't count toward the nag number."""
+    return sum(1 for r in rows if status(r) == PENDING and not wrong_term(r))
 
 
 def last_active(rows):

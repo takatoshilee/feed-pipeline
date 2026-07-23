@@ -156,3 +156,26 @@ def test_apply_sort_sinks_wrong_term_but_keeps_it_above_done():
     applied = {"Term": "Summer 2027", "Fit": 99, "Status": "Applied"}
     order = sorted([applied, wrongt, viable], key=lambda r: apply_sort_key(r, today))
     assert order == [viable, wrongt, applied]   # viable first despite lower fit; done last
+
+
+def test_bad_term_text_hard_gate():
+    from job_radar.tracker import bad_term_text
+    assert bad_term_text("Fall 2026") is True
+    assert bad_term_text("Winter 2027 (Jan-Apr)") is True
+    assert bad_term_text("Spring 2027") is True
+    assert bad_term_text("Summer 2027 (May-Aug)") is False
+    assert bad_term_text("Fall 2027, 12 months") is False
+    assert bad_term_text("16-month, May 2027-Aug 2028") is False
+    assert bad_term_text("not stated") is False
+    assert bad_term_text("") is False
+    assert bad_term_text(None) is False
+
+
+def test_pending_and_top_exclude_wrong_term():
+    from job_radar.tracker import pending_count, top_unapplied
+    rows = [{"Status": "New", "Term": "Summer 2027", "Fit": 80},
+            {"Status": "New", "Term": "Fall 2026", "Fit": 95},
+            {"Status": "Applied", "Term": "Summer 2027", "Fit": 90}]
+    assert pending_count(rows) == 1
+    top = top_unapplied(rows, 5)
+    assert len(top) == 1 and top[0]["Term"] == "Summer 2027"
