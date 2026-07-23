@@ -11,6 +11,7 @@ from .notify import ConsoleNotifier, DiscordNotifier
 from .scorer import (BedrockProvider, ClaudeProvider, FallbackProvider, GeminiProvider,
                      HeuristicProvider, heuristic_score)
 from .sources import enrich_postings, fetch_all
+from .tracker import bad_term_text
 from .urgency import classify
 
 SCORE_CONCURRENCY = 6
@@ -271,6 +272,11 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
         # error scores (e.g. an LLM 429) so nothing lands as a bogus Fit 0 row.
         if sheet_sink is not None and score.ok and score.value >= SHEET_MIN_FIT:
             sheet_sink.add(p, score)
+        # HARD term gate: a role whose stated term starts before Summer 2027 never pings
+        # or hits the digest, however well it scores. (It's still in the Sheet, amber and
+        # sunk, as the safety net for a mis-parsed term.)
+        if bad_term_text(score.term):
+            continue
         level = classify(p, score, company, profile, now)
         if level is None:
             continue
