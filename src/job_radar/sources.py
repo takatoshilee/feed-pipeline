@@ -2,8 +2,8 @@ import asyncio
 
 import httpx
 
-from .adapters import (ashby, greenhouse, lever, oracle, simplify, smartrecruiters,
-                       workable, workday)
+from .adapters import (amazonjobs, ashby, googlecareers, greenhouse, lever, oracle,
+                       simplify, smartrecruiters, workable, workday)
 from .adapters.base import TIMEOUT
 from .models import Company, Posting
 
@@ -16,6 +16,8 @@ ADAPTERS = {
     "simplify": simplify,
     "workable": workable,
     "oracle": oracle,
+    "googlecareers": googlecareers,   # proprietary-ATS giants: direct polling
+    "amazonjobs": amazonjobs,
 }
 
 
