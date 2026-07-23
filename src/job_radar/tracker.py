@@ -94,7 +94,23 @@ def apply_sort_key(row, today: date):
     dd = (d - today).days if d is not None else None
     urgent = 0 if (dd is not None and 0 <= dd <= 14) else 1
     deadline_order = dd if (dd is not None and dd >= 0) else 9999
-    return (done, priority_rank(row), urgent, deadline_order, -fit(row))
+    return (done, wrong_term(row), priority_rank(row), urgent, deadline_order, -fit(row))
+
+
+# Work terms Taka cannot take (he recruits for Summer 2027 onwards; Winter 2027 is a
+# class term). Rows whose Term names ONLY these sink below viable/undated ones.
+_BAD_TERM_TOKENS = ("2024", "2025", "2026", "winter 2027")
+
+
+def wrong_term(row) -> int:
+    """1 if the posting's stated work term is pre-Summer-2027 (he can't take it), else 0.
+    Undated / 'not stated' terms count as viable, the season is usually just unstated."""
+    t = (row.get("Term") or "").strip().lower()
+    if not t or "not stated" in t:
+        return 0
+    if ("2027" in t or "2028" in t) and "winter 2027" not in t:
+        return 0
+    return 1 if any(tok in t for tok in _BAD_TERM_TOKENS) else 0
 
 
 def stats(rows) -> dict:

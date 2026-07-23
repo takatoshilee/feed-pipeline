@@ -134,3 +134,25 @@ def test_pending_count_and_last_active():
     assert pending_count(rows) == 1
     assert last_active(rows) == date(2026, 6, 8)   # most recent applied-on
     assert last_active([row(uid="x")]) is None     # nothing applied yet
+
+
+def test_wrong_term_sinks_untakeable_seasons():
+    from job_radar.tracker import wrong_term
+    assert wrong_term({"Term": "Fall 2026"}) == 1
+    assert wrong_term({"Term": "Winter 2027 (Jan-Apr)"}) == 1
+    assert wrong_term({"Term": "Summer 2027 (May-Aug)"}) == 0
+    assert wrong_term({"Term": "16-month, May 2027-Aug 2028"}) == 0
+    assert wrong_term({"Term": "not stated"}) == 0
+    assert wrong_term({"Term": ""}) == 0
+    assert wrong_term({}) == 0
+
+
+def test_apply_sort_sinks_wrong_term_but_keeps_it_above_done():
+    from datetime import date
+    from job_radar.tracker import apply_sort_key
+    today = date(2026, 7, 23)
+    viable = {"Term": "Summer 2027", "Fit": 70, "Status": "New"}
+    wrongt = {"Term": "Fall 2026", "Fit": 95, "Status": "New"}
+    applied = {"Term": "Summer 2027", "Fit": 99, "Status": "Applied"}
+    order = sorted([applied, wrongt, viable], key=lambda r: apply_sort_key(r, today))
+    assert order == [viable, wrongt, applied]   # viable first despite lower fit; done last
