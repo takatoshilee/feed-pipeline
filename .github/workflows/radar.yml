@@ -16,7 +16,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 14   # never bleed into the next 15-min cron window (queue serializes runs)
+    timeout-minutes: 20   # fall-wave runs are fatter; concurrency queue (cancel-in-progress false) serializes overlaps
     steps:
       - uses: actions/checkout@v4
 
