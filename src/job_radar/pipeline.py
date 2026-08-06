@@ -259,6 +259,17 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
         new = kept
 
     survivors = [p for p in new if passes_rules(p, profile, now)]
+    # Bound the expensive tail (enrich + LLM scoring) so a backlog spike — fall-wave
+    # volume, newly added boards, or state loss after a killed run — can never blow the
+    # run past its cron window. Survivors beyond the cap are DEFERRED: kept out of this
+    # run's seen-sweep so they come back as 'new' next run and get scored then, best
+    # heuristic fit first. Deferrals are surfaced in stats, never silent.
+    score_cap = int(os.environ.get("SCORE_CAP", "150"))
+    deferred_uids: set = set()
+    if len(survivors) > score_cap:
+        survivors.sort(key=lambda p: heuristic_score(p, profile).value, reverse=True)
+        deferred_uids = {p.uid for p in survivors[score_cap:]}
+        survivors = survivors[:score_cap]
     survivors = await enrich_postings(survivors, cmap)  # fill descriptions for the few that need it
     scored = await _score_all(provider, survivors, profile)
 
@@ -323,13 +334,17 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
     # Mark every fetched posting seen (refreshing its timestamp so long-lived listings
     # never age out and re-fire), then ALWAYS persist. A failing webhook can neither
     # abort the run nor leave the seen-set unsaved (which would re-send delivered items).
+    # Deferred survivors are the one exception: they must resurface next run to be scored.
     for p in postings:
+        if p.uid in deferred_uids:
+            continue
         seen.mark(p, now)
     seen.save(now=now)
 
     stats = {
         "boards": len(companies), "postings": len(postings), "errors": len(errors),
-        "new": len(new), "primed": primed_new, "survivors": len(survivors), "pinged": pinged,
+        "new": len(new), "primed": primed_new, "survivors": len(survivors),
+        "deferred": len(deferred_uids), "pinged": pinged,
         "digest": len(digest), "tracked": tracked, "closed": closed,
         "score_errors": sum(1 for _, s in scored if not s.ok),
     }

@@ -346,3 +346,32 @@ async def test_error_score_neither_pings_nor_writes(tmp_path, monkeypatch):
     assert sink.added == []             # error score never written
     assert stats["score_errors"] == 1   # the failure is surfaced in stats, not silent
     assert notifier.ones == []          # and a bad-fit/errored dream role no longer pings
+
+
+async def test_score_cap_defers_and_carries_over(tmp_path, monkeypatch):
+    # 5 rules-passing postings, cap 2: each run scores the top 2 and DEFERS the rest,
+    # which must come back as new next run until everything has been scored. Nothing lost.
+    many = [Posting(uid=f"greenhouse:c:cap{i}", ats="greenhouse", company="c",
+                    title=f"Software Intern {i}", location="Toronto", url=f"https://x.test/{i}",
+                    posted_at=NOW, description="d") for i in range(5)]
+
+    async def fake_fetch_all(companies, **kw):
+        return many, []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    monkeypatch.setenv("SCORE_CAP", "2")
+
+    config = _config(tmp_path)
+    _prime_seen(config)
+
+    s1 = await pipeline.run(config, provider=FakeProvider(value=90), notifier=FakeNotifier(), now=NOW)
+    assert s1["survivors"] == 2 and s1["deferred"] == 3
+
+    s2 = await pipeline.run(config, provider=FakeProvider(value=90), notifier=FakeNotifier(), now=NOW)
+    assert s2["survivors"] == 2 and s2["deferred"] == 1
+
+    s3 = await pipeline.run(config, provider=FakeProvider(value=90), notifier=FakeNotifier(), now=NOW)
+    assert s3["survivors"] == 1 and s3["deferred"] == 0
+
+    s4 = await pipeline.run(config, provider=FakeProvider(value=90), notifier=FakeNotifier(), now=NOW)
+    assert s4["new"] == 0                      # everything eventually seen exactly once
