@@ -1,6 +1,6 @@
-# Example watch-list showing the shape (real entries, all five ATSs).
+# Example watch-list showing the shape (real entries, several of the ATSs).
 #
-# The live list (300+ boards, grown weekly by discover.yml) lives in a
+# The live list (~2,900 boards, grown weekly by discover.yml) lives in a
 # private config repo and is fetched at runtime in CI; it stays private
 # because it encodes my personal job-hunt targeting.
 #
