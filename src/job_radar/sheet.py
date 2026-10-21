@@ -14,6 +14,9 @@ HEADERS = ["uid", "Company", "Role", "Applied", "Fit", "Resume", "Term", "Why", 
            "Added on"]
 
 
+TOP_TAB = "Top 30"   # generated ranking tab (write_top); never the tracker
+
+
 def _col(name: str) -> int:
     return HEADERS.index(name) + 1  # gspread columns are 1-based
 
@@ -25,10 +28,19 @@ def connect(creds_path: str, sheet_id: str):
 
     creds = Credentials.from_service_account_file(
         creds_path, scopes=["https://www.googleapis.com/auth/spreadsheets"])
-    ws = gspread.authorize(creds).open_by_key(sheet_id).sheet1
+    ws = tracker_tab(gspread.authorize(creds).open_by_key(sheet_id))
     ensure_headers(ws)
     ensure_checkbox(ws)
     return ws
+
+
+def tracker_tab(book):
+    """The tracker worksheet: the first tab that is not the generated Top 30 tab. Picking
+    `.sheet1` blindly is unsafe because tab order is whatever Taka drags it to."""
+    for ws in book.worksheets():
+        if ws.title != TOP_TAB:
+            return ws
+    return book.sheet1
 
 
 def ensure_checkbox(ws) -> None:
@@ -249,14 +261,14 @@ class SheetSink:
         return len(rows)
 
 
-TOP_TAB = "Top 30"
-
 
 def write_top(ws, today=None, prepare_url: str | None = None) -> int:
     """Rebuild the 'Top 30' tab from the tracker rows (topn.top), creating the tab on
     first use. Read-only on the main tracker: only the Top tab is cleared and rewritten,
     so nothing Taka typed in Sheet1 is touched. Returns the number of roles listed."""
     from . import topn
+    if ws.title == TOP_TAB:
+        return 0                 # never rank the ranking tab itself
     today = today or date.today()
     ranked = topn.top(all_records(ws), today)
     values = topn.table(ranked, prepare_url)
@@ -265,7 +277,7 @@ def write_top(ws, today=None, prepare_url: str | None = None) -> int:
         tab = book.worksheet(TOP_TAB)
     except Exception:
         tab = book.add_worksheet(title=TOP_TAB, rows=topn.TOP_N + 5,
-                                 cols=len(topn.TOP_HEADERS), index=0)
+                                 cols=len(topn.TOP_HEADERS))   # appended after the tracker
     tab.clear()
     tab.update(range_name="A1", values=values, value_input_option="USER_ENTERED")
     return len(ranked)

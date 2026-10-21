@@ -1,7 +1,7 @@
 from datetime import date
 
 from job_radar import topn
-from job_radar.sheet import write_top
+from job_radar.sheet import TOP_TAB, tracker_tab, write_top
 
 TODAY = date(2026, 10, 21)
 
@@ -99,15 +99,17 @@ class FakeBook:
         return self.tab
 
     def add_worksheet(self, title, rows, cols, index=None):
+        assert index is None          # must never become the first tab
         self.added = True
         self.tab = FakeTab()
         return self.tab
 
 
 class FakeWS:
-    def __init__(self, records, book):
+    def __init__(self, records, book, title="Sheet1"):
         self._records = records
         self.spreadsheet = book
+        self.title = title
 
     def get_all_records(self):
         return self._records
@@ -127,3 +129,24 @@ def test_write_top_reuses_existing_tab():
     book = FakeBook(has_tab=True)
     write_top(FakeWS([row()], book), TODAY)
     assert not book.added and len(book.tab.values) == 2
+
+
+def test_write_top_refuses_to_rank_itself():
+    book = FakeBook(has_tab=True)
+    assert write_top(FakeWS([row()], book, title=TOP_TAB), TODAY) == 0
+    assert book.tab.values is None
+
+
+class Book:
+    def __init__(self, titles):
+        self._tabs = [FakeWS([], None, title=t) for t in titles]
+        self.sheet1 = self._tabs[0]
+
+    def worksheets(self):
+        return self._tabs
+
+
+def test_tracker_tab_skips_top_tab_wherever_it_sits():
+    assert tracker_tab(Book([TOP_TAB, "Sheet1"])).title == "Sheet1"
+    assert tracker_tab(Book(["Sheet1", TOP_TAB])).title == "Sheet1"
+    assert tracker_tab(Book(["Jobs"])).title == "Jobs"
