@@ -326,6 +326,13 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
             await asyncio.to_thread(sheet.stamp_applied, sheet_sink.ws)
         except Exception as e:
             errors.append(("sheet", f"stamp_applied: {e!r}"))
+        # Rebuild the ranked 'Top 30' tab so the list of what to apply to next is always
+        # current. Only that tab is rewritten; the main tracker rows are read, not changed.
+        try:
+            await asyncio.to_thread(sheet.write_top, sheet_sink.ws, None,
+                                    os.environ.get("PREPARE_URL") or None)
+        except Exception as e:
+            errors.append(("sheet", f"write_top: {e!r}"))
     try:
         await notifier.send_digest(digest, now)
     except Exception as e:

@@ -78,6 +78,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}   # boto3 region fallback (no ~/.aws in CI)
           SEEN_PATH: .state/seen.json
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          PREPARE_URL: ${{ vars.PREPARE_URL }}     # where the Top 30 tab's Prepare links go (optional)
           GOOGLE_CREDENTIALS_PATH: google-creds.json
         run: |
           set -o pipefail
