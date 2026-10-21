@@ -8,16 +8,17 @@ Aggregators lag the source by hours or days, and they quietly miss the postings 
 
 Every 15 minutes:
 
-1. pulls open postings from ~2,900 company boards across 11 ATS adapters
+1. pulls open postings from ~3,300 company boards across 12 adapters
 2. drops anything already seen, closed, or duplicated across sources
 3. has an LLM read each new posting, score the fit against my profile, and extract the term dates, since a Summer 2026 role is useless to me and gets gated out
 4. writes what survives to a Google Sheet and pings Discord for the high scorers
+5. rebuilds a "Top 30" tab in the same sheet: the open roles most worth applying to next, ranked by fit plus my own priorities (ML and LLM roles first, 12 to 16 month co-ops up, low-level and research roles down)
 
 The sheet is the actual point. One row per role, colour-coded by state, applied-date stamped when I tick the box. I stopped keeping a separate tracker.
 
 ## adapters
 
-Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Oracle, Google Careers, Amazon Jobs, and the Simplify community feeds.
+Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Oracle, Google Careers, Amazon Jobs, the Simplify community feeds, and a hand-curated Canadian internship list on GitHub.
 
 Each one is a small module under `src/job_radar/adapters/` that turns a board into `Posting` objects, so adding another is usually an afternoon of reading someone's JSON. A few companies expose nothing usable (Microsoft's careers site is browser-locked), and those I still check by hand.
 

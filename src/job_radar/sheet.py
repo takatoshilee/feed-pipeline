@@ -247,3 +247,25 @@ class SheetSink:
         self.ws.append_rows(rows, value_input_option="USER_ENTERED",
                             insert_data_option="INSERT_ROWS")
         return len(rows)
+
+
+TOP_TAB = "Top 30"
+
+
+def write_top(ws, today=None, prepare_url: str | None = None) -> int:
+    """Rebuild the 'Top 30' tab from the tracker rows (topn.top), creating the tab on
+    first use. Read-only on the main tracker: only the Top tab is cleared and rewritten,
+    so nothing Taka typed in Sheet1 is touched. Returns the number of roles listed."""
+    from . import topn
+    today = today or date.today()
+    ranked = topn.top(all_records(ws), today)
+    values = topn.table(ranked, prepare_url)
+    book = ws.spreadsheet
+    try:
+        tab = book.worksheet(TOP_TAB)
+    except Exception:
+        tab = book.add_worksheet(title=TOP_TAB, rows=topn.TOP_N + 5,
+                                 cols=len(topn.TOP_HEADERS), index=0)
+    tab.clear()
+    tab.update(range_name="A1", values=values, value_input_option="USER_ENTERED")
+    return len(ranked)
