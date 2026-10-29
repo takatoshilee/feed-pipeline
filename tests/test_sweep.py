@@ -152,3 +152,23 @@ def test_sheetsink_skips_feed_copies_and_same_city_duplicates():
                           company="simplify", loc="Montreal"), s)
     assert not sink.add(P("greenhouse:lyft:2", "ML Intern", company="lyft", loc="Toronto"), s)
     assert sink.add(P("greenhouse:lyft:3", "ML Intern", company="lyft", loc="Montreal"), s)
+
+
+async def test_sweep_scores_curated_list_roles_first(tmp_path, monkeypatch):
+    posts = [P("greenhouse:c:8", "Software Intern"),               # raw board only
+             P("greenhouse:c:7", "Data Intern"),                   # also on a curated list
+             P("simplify:simplify:7", "c: Data Intern", ats="simplify", company="simplify")]
+
+    async def fake_fetch_all(companies, **kw):
+        return posts, []
+
+    monkeypatch.setattr(pipeline, "fetch_all", fake_fetch_all)
+    monkeypatch.setattr(pipeline, "SWEEP_CAP", 1)
+    monkeypatch.setattr(sheet, "write_top", lambda *a, **k: 0)
+    monkeypatch.setattr(sheet, "all_records", lambda ws: [])
+    sink = Sink()
+    stats = await pipeline.sweep(_config(tmp_path), provider=FakeProvider(value=80),
+                                 sheet_sink=sink, cache=ScoreCache(str(tmp_path / "s.json")),
+                                 now=NOW)
+    assert sink.added == ["greenhouse:c:7"]
+    assert stats["listed_pool"] == 1 and stats["left_for_tomorrow"] == 1
