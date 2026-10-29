@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import replace
 
 from .config import load_config
-from .pipeline import backfill, preview, run
+from .pipeline import backfill, preview, run, sweep
 
 
 def _parse_args(argv=None):
@@ -26,6 +26,8 @@ def _parse_args(argv=None):
                     help="how far back --backfill reaches for still-open roles (default 60)")
     ap.add_argument("--backfill-min-fit", type=int, default=60,
                     help="--backfill only writes matches scoring >= this (default 60)")
+    ap.add_argument("--sweep", action="store_true",
+                    help="daily: score open roles never scored before, add good ones to the Sheet (no pings)")
     ap.add_argument("--limit", type=int, help="only poll the first N companies (local testing)")
     ap.add_argument("--company", help="only poll this company slug (local testing)")
     return ap.parse_args(argv)
@@ -50,6 +52,8 @@ def main(argv=None):
     config = replace(config, companies=companies, settings=settings)
     if args.preview:
         asyncio.run(preview(config))
+    elif args.sweep:
+        asyncio.run(sweep(config))
     elif args.backfill:
         asyncio.run(backfill(config, max_age_days=args.backfill_days, min_fit=args.backfill_min_fit))
     else:

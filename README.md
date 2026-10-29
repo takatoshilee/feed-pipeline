@@ -14,6 +14,8 @@ Every 15 minutes:
 4. writes what survives to a Google Sheet and pings Discord for the high scorers
 5. rebuilds a "Top 30" tab in the same sheet: the open roles most worth applying to next, ranked by fit plus my own priorities (ML and LLM roles first, 12 to 16 month co-ops up, low-level and research roles down)
 
+Once a day a sweep goes back over the whole open backlog, up to about 75 days old, and scores every role the 15-minute poll never looked at: postings that were already a few weeks old when I first saw them, the backlog of a board I just added, roles a since-fixed filter dropped. Each role is scored once ever, the same job reached through a company board and an aggregator list counts once, and the run ends with a coverage line against the Simplify and Canadian lists so I can see what is still slipping through.
+
 The sheet is the actual point. One row per role, colour-coded by state, applied-date stamped when I tick the box. I stopped keeping a separate tracker.
 
 ## adapters
@@ -41,6 +43,7 @@ Worth knowing:
 
 - `--prime` marks everything currently open as seen without notifying. Run it once on a fresh checkout or the first real run will fire hundreds of pings.
 - `--preview` ranks the current backlog, read-only.
+- `--sweep` is the daily catch-up pass described above. It writes to the sheet, so run it with `--dry-run` off only in CI.
 - `--company <slug>` and `--limit N` when you are poking at one board.
 
 Configuration is environment variables: `DISCORD_WEBHOOK_URL`, `GOOGLE_SHEET_ID` and `GOOGLE_CREDENTIALS_PATH`, and `LLM_PROVIDER` / `LLM_MODEL` / `LLM_API_KEY` for the scorer. Bedrock works too, set `AWS_REGION` for it.
