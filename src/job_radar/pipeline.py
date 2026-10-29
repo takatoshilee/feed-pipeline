@@ -212,6 +212,92 @@ async def backfill(config, *, provider=None, sheet_sink=None, now=None,
     return stats
 
 
+SWEEP_CAP = int(os.environ.get("SWEEP_CAP", "150"))
+SWEEP_DAYS = 75     # still-open roles up to this old get a look in the daily sweep
+
+
+async def sweep(config, *, provider=None, sheet_sink=None, cache=None, now=None,
+                max_age_days=SWEEP_DAYS, min_fit=SHEET_MIN_FIT):
+    """Daily safety net for the 15-minute radar. The radar only scores postings it sees
+    for the first time and only within freshness_days, and a newly added board's backlog
+    is absorbed silently, so a good role can slip past for good. The sweep looks at the
+    WHOLE current backlog (up to max_age_days old), skips anything already in the Sheet
+    (by uid or by role) or already scored before (ScoreCache), LLM-scores up to SWEEP_CAP
+    of the rest (best heuristic first) and writes matches >= min_fit. No Discord pings.
+    Ends by printing a coverage report against the Simplify and Canadian lists."""
+    from . import coverage, sheet as sheet_mod
+    from .scorecache import ScoreCache
+    now = now or datetime.now(timezone.utc)
+    profile, companies, settings = config.profile, config.companies, config.settings
+    profile = replace(profile, freshness_days=max(profile.freshness_days, max_age_days))
+    provider = provider or build_provider(settings)
+    if sheet_sink is None:
+        sheet_sink = build_sheet_sink(settings)
+    if sheet_sink is None:
+        raise SystemExit("sweep: no Sheet configured "
+                         "(set GOOGLE_SHEET_ID and GOOGLE_CREDENTIALS_PATH)")
+    if cache is None:
+        cache = ScoreCache(os.environ.get("SCORED_PATH", ".state/scored.json")).load()
+    cmap = _company_map(companies)
+
+    postings, errors = await fetch_all(companies)
+    postings = _dedup_by_uid(postings)
+    survivors = [p for p in postings if passes_rules(p, profile, now)
+                 and not bad_term_text(p.title)]
+    pool = [p for p in survivors if not sheet_sink.is_tracked(p.uid)
+            and not sheet_sink.is_duplicate_role(p) and p.uid not in cache]
+    # one LLM call per real role: the same job from three sources is scored once
+    from . import rolekey
+    by_role: dict = {}
+    copies: dict = {}       # role key -> every uid that is this role, cached together
+    for p in pool:
+        k = rolekey.key(p.company, p.title)
+        copies.setdefault(k, []).append(p.uid)
+        if k not in by_role or (by_role[k].ats in rolekey.AGGREGATORS
+                                and p.ats not in rolekey.AGGREGATORS):
+            by_role[k] = p          # prefer the company's own board over a feed copy
+    pool = list(by_role.values())
+    pool.sort(key=lambda p: heuristic_score(p, profile).value, reverse=True)
+    to_score = await enrich_postings(pool[:SWEEP_CAP], cmap)
+    scored = await _score_all(provider, to_score, profile)
+
+    added = 0
+    for p, score in scored:
+        if not score.ok:
+            continue                         # retried tomorrow: not cached
+        for uid in copies.get(rolekey.key(p.company, p.title), [p.uid]):
+            cache.put(uid, score.value, now)
+        if score.value >= min_fit and not bad_term_text(score.term):
+            added += sheet_sink.add(p, score)
+    try:
+        tracked = await asyncio.to_thread(sheet_sink.flush)
+    except Exception as e:
+        errors.append(("sheet", f"flush: {e!r}"))
+        tracked = 0
+    cache.save(now=now)
+    try:
+        await asyncio.to_thread(sheet_mod.write_top, sheet_sink.ws, None,
+                                os.environ.get("PREPARE_URL") or None)
+    except Exception as e:
+        errors.append(("sheet", f"write_top: {e!r}"))
+
+    stats = {"boards": len(companies), "postings": len(postings), "errors": len(errors),
+             "survivors": len(survivors), "unscored_pool": len(pool),
+             "scored": len(scored), "score_errors": sum(1 for _, s in scored if not s.ok),
+             "left_for_tomorrow": max(0, len(pool) - SWEEP_CAP), "tracked": tracked,
+             "cache_size": len(cache)}
+    print("job-radar SWEEP:", stats)
+    try:
+        rows = await asyncio.to_thread(sheet_mod.all_records, sheet_sink.ws)
+        print("job-radar COVERAGE:", coverage.report(postings, rows, cache, profile, now))
+    except Exception as e:
+        print(f"coverage: skipped ({e!r})")
+    sheet_errors = [e for e in errors if e[0] == "sheet"]
+    if sheet_errors:
+        print("sheet errors:", sheet_errors)
+    return stats
+
+
 async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None, force_prime=False):
     now = now or datetime.now(timezone.utc)
     profile, companies, settings = config.profile, config.companies, config.settings
@@ -356,6 +442,9 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
         "score_errors": sum(1 for _, s in scored if not s.ok),
     }
     print("job-radar run:", stats)
+    sheet_errors = [e for e in errors if e[0] in ("sheet", "digest")]
+    if sheet_errors:
+        print("sheet errors:", sheet_errors)
     if errors:
         print("errors (first 10):", errors[:10])
     return stats

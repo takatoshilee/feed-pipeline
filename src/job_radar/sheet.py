@@ -2,6 +2,7 @@
 lazy (inside connect) so the row logic below is testable with a fake worksheet."""
 from datetime import date
 
+from . import rolekey
 from .filters import visa_note
 from .models import Posting, Score
 
@@ -111,6 +112,27 @@ def ensure_headers(ws) -> None:
     if len(current) < len(HEADERS) and HEADERS[:len(current)] == current:
         for i in range(len(current) + 1, len(HEADERS) + 1):
             ws.update_cell(1, i, HEADERS[i - 1])
+
+
+def _loc(location: str) -> str:
+    return "".join(ch for ch in (location or "").lower() if ch.isalnum())
+
+
+def _open_role_keys(ws) -> dict:
+    """role key -> set of normalized locations, over the rows still open (not Applied,
+    Closed or Skip). Best-effort: a read failure just disables role-level dedup."""
+    from .tracker import PENDING, status
+    out: dict = {}
+    try:
+        records = ws.get_all_records()
+    except Exception:
+        return out
+    for r in records:
+        if status(r) != PENDING:
+            continue
+        k = rolekey.key(str(r.get("Company", "")), str(r.get("Role", "")))
+        out.setdefault(k, set()).add(_loc(str(r.get("Location", ""))))
+    return out
 
 
 def existing_uids(ws) -> set:
@@ -232,6 +254,7 @@ class SheetSink:
         self.ws = ws
         self._header = ws.row_values(1) or list(HEADERS)   # write in the sheet's real order
         self._seen = existing_uids(ws)
+        self._keys = _open_role_keys(ws)
         self._buffer: list[list] = []
         self._added_on = added_on or date.today().isoformat()  # stamps when WE found the role
 
@@ -244,9 +267,22 @@ class SheetSink:
         uid is already in the Sheet or already queued this run."""
         if posting.uid in self._seen:
             return False
+        k = rolekey.key(posting.company, posting.title)
+        if self.is_duplicate_role(posting):
+            return False
         self._buffer.append(_row_for_header(posting, score, self._added_on, self._header))
         self._seen.add(posting.uid)
+        self._keys.setdefault(k, set()).add(_loc(posting.location))
         return True
+
+    def is_duplicate_role(self, posting: Posting) -> bool:
+        """The same role is already an open row. Copies from an aggregator feed are always
+        duplicates of a row we have; a direct-board posting is one only when it is also in
+        the same location (separate city reqs from one board stay separate rows)."""
+        locs = self._keys.get(rolekey.key(posting.company, posting.title))
+        if not locs:
+            return False
+        return posting.ats in rolekey.AGGREGATORS or _loc(posting.location) in locs
 
     def flush(self) -> int:
         """Write all queued rows in a single batched call. Returns the number written.

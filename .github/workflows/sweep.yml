@@ -1,0 +1,79 @@
+name: sweep
+on:
+  schedule:
+    - cron: "0 10 * * *"   # daily, 10:00 UTC (6am Toronto), between radar polls
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20   # fetch all boards + LLM-score up to SWEEP_CAP never-scored roles
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch private config
+        uses: actions/checkout@v4
+        with:
+          repository: takatoshilee/job-radar-config
+          ssh-key: ${{ secrets.CONFIG_DEPLOY_KEY }}
+          path: .private-config
+      - name: Install private config
+        run: |
+          cp .private-config/companies.yaml config/companies.yaml
+          cp .private-config/profile.yaml config/profile.yaml
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # Which postings were already scored, so each role costs one LLM call ever.
+      - name: Restore score cache
+        uses: actions/cache@v4
+        with:
+          path: .state/scored.json
+          key: scored-${{ github.run_id }}
+          restore-keys: |
+            scored-
+
+      - run: pip install -e ".[sheet,bedrock]"
+
+      - name: Write Google credentials
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          if [ -n "$GOOGLE_CREDENTIALS" ]; then
+            printf '%s' "$GOOGLE_CREDENTIALS" > google-creds.json
+            echo "wrote google-creds.json"
+          else
+            echo "ERROR: GOOGLE_CREDENTIALS secret missing; the sweep writes to the Sheet" && exit 1
+          fi
+
+      # Never pings Discord and never touches the radar's seen-set. Scores roles the radar
+      # never looked at (too old when first seen, absorbed when a board was added, filtered
+      # by a since-fixed rule) and writes good ones to the Sheet, then prints coverage.
+      - name: Sweep the backlog
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_CREDENTIALS_PATH: google-creds.json
+          PREPARE_URL: ${{ vars.PREPARE_URL }}
+          SCORED_PATH: .state/scored.json
+        run: |
+          set -o pipefail
+          python -m job_radar --sweep | tee sweep.log
+          { echo '```'; grep -E "SWEEP|COVERAGE|sheet errors" sweep.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
