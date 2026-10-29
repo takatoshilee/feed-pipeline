@@ -223,7 +223,7 @@ async def sweep(config, *, provider=None, sheet_sink=None, cache=None, now=None,
     is absorbed silently, so a good role can slip past for good. The sweep looks at the
     WHOLE current backlog (up to max_age_days old), skips anything already in the Sheet
     (by uid or by role) or already scored before (ScoreCache), LLM-scores up to SWEEP_CAP
-    of the rest (best heuristic first) and writes matches >= min_fit. No Discord pings.
+    of the rest (curated-list roles first, then best heuristic) and writes matches >= min_fit. No Discord pings.
     Ends by printing a coverage report against the Simplify and Canadian lists."""
     from . import coverage, sheet as sheet_mod
     from .scorecache import ScoreCache
@@ -250,14 +250,20 @@ async def sweep(config, *, provider=None, sheet_sink=None, cache=None, now=None,
     from . import rolekey
     by_role: dict = {}
     copies: dict = {}       # role key -> every uid that is this role, cached together
+    listed: set = set()     # role keys that a curated list (Simplify, Canadian) carries
     for p in pool:
         k = rolekey.key(p.company, p.title)
         copies.setdefault(k, []).append(p.uid)
+        if p.ats in rolekey.AGGREGATORS:
+            listed.add(k)
         if k not in by_role or (by_role[k].ats in rolekey.AGGREGATORS
                                 and p.ats not in rolekey.AGGREGATORS):
             by_role[k] = p          # prefer the company's own board over a feed copy
     pool = list(by_role.values())
-    pool.sort(key=lambda p: heuristic_score(p, profile).value, reverse=True)
+    # Roles on a curated list go first: they are hand-picked student roles, so they turn
+    # into Sheet rows far more often than the long tail of raw board postings.
+    pool.sort(key=lambda p: (rolekey.key(p.company, p.title) in listed,
+                             heuristic_score(p, profile).value), reverse=True)
     to_score = await enrich_postings(pool[:SWEEP_CAP], cmap)
     scored = await _score_all(provider, to_score, profile)
 
@@ -284,6 +290,7 @@ async def sweep(config, *, provider=None, sheet_sink=None, cache=None, now=None,
     stats = {"boards": len(companies), "postings": len(postings), "errors": len(errors),
              "survivors": len(survivors), "unscored_pool": len(pool),
              "scored": len(scored), "score_errors": sum(1 for _, s in scored if not s.ok),
+             "listed_pool": len(listed),
              "left_for_tomorrow": max(0, len(pool) - SWEEP_CAP), "tracked": tracked,
              "cache_size": len(cache)}
     print("job-radar SWEEP:", stats)
