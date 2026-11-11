@@ -1,14 +1,14 @@
 """The daily "Top 30" list: which open roles are most worth applying to right now.
 
 Pure logic over tracker rows (same dicts as tracker.py), so it is fully unit-testable.
-The rank starts from the LLM fit score and then applies Taka's own priorities, agreed
-Oct 21 2026:
-  1. applied ML / LLM engineering first (the Summer 2027 internship lane),
-  2. software roles with AI work next (the 12-month co-op lane), and 12 to 16 month
-     terms get a boost because his co-op must be one continuous 12 or 16 month term,
+The rank starts from the LLM fit score and then applies Taka's own priorities
+(Oct 21 2026, widened Nov 10 2026):
+  1. target lanes first: data analyst / data science, ML / AI, product, marketing, design,
+  2. 12 to 16 month terms get a boost (his co-op must be one continuous 12 or 16 months),
   3. low-level roles (compilers, kernels, embedded, hardware) rank low, he doesn't
      want that work, and research-titled roles rank lower too,
-  4. Canada and remote beat US on-site.
+  4. Canada and remote first, then the US, then other countries (ranked low, not dropped),
+  5. recently posted roles get a small boost, but any open role can make the list.
 Anything he flagged in the Priority column, or with a deadline inside two weeks, jumps up.
 """
 import re
@@ -26,16 +26,19 @@ _ML = (" ml ", "machine learning", " ai ", " ai/", "/ai ", "artificial intellige
 _LOW_LEVEL = ("compiler", "kernel", "embedded", "firmware", "fpga", "asic", "rtl",
               "verification", "silicon", "hardware", "driver", "gpu", "c++", "dsp",
               "performance engineer", "systems-on-chip", "soc ", "physical design")
+_TARGET = _ML + (" data ", "analyst", "analytics", "product", "marketing", "design",
+                 " ux", "growth", "business intelligence", "insights")
+_TARGET_LANES = ("data", "ml", "product", "marketing", "design")
 _RESEARCH = ("research", "researcher")
 _LONG_TERM = re.compile(r"\b(12|16)[\s-]*(months?|mos?)\b|\b(12|16)m\b")
-# Starts he can't take (classes through April 2027). tracker.wrong_term already catches
-# "Winter/Spring 2027" and older years; this adds month-named starts like "Jan 2027".
-_EARLY_2027 = re.compile(r"\b(jan|feb|mar|apr)[a-z]*\.?\s*(-\s*\w+\s*)?2027")
 _US_REMOTE = ("remote in us", "us - remote", "remote (us", "remote, us", "united states",
               "usa")
 _RESTRICTED = ("students only", "limited to", "only open to")
 _CANADA = ("canada", ", on", ", bc", ", qc", ", ab", "toronto", "mississauga", "markham",
            "waterloo", "ottawa", "montreal", "vancouver", "calgary", "remote")
+_US = _US_REMOTE + ("united states", ", ca", ", ny", ", wa", ", tx", ", ma", ", il", ", co",
+                    ", ga", ", nc", ", pa", ", va", ", nj", ", or", ", ut", ", az", ", fl",
+                    "san francisco", "new york", "seattle", "austin", "boston", "chicago")
 
 # Pseudo-companies whose real company name lives in the Role ("Pebl: SWE Intern").
 _PSEUDO = {"simplify", "canadalist"}
@@ -63,13 +66,16 @@ def score(row, today: date) -> tuple[int, list[str]]:
     s = tracker.fit(row)
     why = [f"fit {s}"]
 
-    low_level = _has(t, _LOW_LEVEL)
+    lane = (row.get("Lane") or "").strip().lower()
+    flags = (row.get("Flags") or "").lower()
+    low_level = "low-level" in flags or _has(t, _LOW_LEVEL)
     if low_level:
         s -= 25
         why.append("low-level")
-    elif _has(t, _ML) or (row.get("Resume") or "").strip().upper() == "AI":
+    elif lane in _TARGET_LANES or (not lane and (_has(t, _TARGET)
+                                                 or (row.get("Resume") or "").strip().upper() == "AI")):
         s += 10
-        why.append("ML/AI")
+        why.append(lane if lane else "target lane")
 
     if _has(t, _RESEARCH) and "data scien" not in t:
         s -= 15
@@ -86,8 +92,11 @@ def score(row, today: date) -> tuple[int, list[str]]:
     if loc and _has(loc, _CANADA) and not _has(loc, _US_REMOTE):
         s += 5
         why.append("Canada/remote")
-    elif loc:
+    elif loc and _has(loc, _US):
         s -= 5
+    elif loc:
+        s -= 15
+        why.append("outside Canada/US")
 
     rank = tracker.priority_rank(row)
     if rank == 0:
@@ -103,20 +112,22 @@ def score(row, today: date) -> tuple[int, list[str]]:
         why.append(f"due {d.isoformat()}")
 
     p = tracker.parse_date(row.get("Posted"))
-    if p is not None and 0 <= (today - p).days <= 7:
-        s += 3
-        why.append("new this week")
+    if p is not None:
+        age = (today - p).days
+        if 0 <= age <= 7:
+            s += 4
+            why.append("new this week")
+        elif age <= 30:
+            s += 2
+        elif age > 120:
+            s -= 3
+            why.append("posted 4+ months ago")
     return s, why
 
 
 def eligible(row) -> bool:
     """Open, not applied or skipped, and not a work term he can't take."""
-    if tracker.status(row) != tracker.PENDING or tracker.wrong_term(row):
-        return False
-    term = (row.get("Term") or "").lower()
-    if "winter" in term and "2028" not in term:
-        return False            # an undated "Winter co-op" posted now means Winter 2027
-    return not _EARLY_2027.search(term)
+    return tracker.status(row) == tracker.PENDING and not tracker.wrong_term(row)
 
 
 def top(rows, today: date, n: int = TOP_N) -> list[tuple[int, list[str], dict]]:

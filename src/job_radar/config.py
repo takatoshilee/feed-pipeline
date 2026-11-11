@@ -41,6 +41,7 @@ def load_profile(path: str) -> Profile:
         digest_threshold=int(d.get("digest_threshold", 50)),
         high_score=int(d.get("high_score", 80)),
         high_fresh_hours=int(d.get("high_fresh_hours", 2)),
+        locations_mode=str(d.get("locations_mode", "filter")).lower(),
     )
 
 

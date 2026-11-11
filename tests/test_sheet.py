@@ -186,3 +186,12 @@ def test_stamp_applied_dates_ticked_rows_once():
 def test_stamp_applied_missing_columns_is_noop():
     ws = FakeWS([["uid", "Company"], ["a:b:1", "X"]])
     assert stamp_applied(ws) == 0
+
+
+def test_ensure_headers_appends_missing_columns_after_custom_ones():
+    from job_radar.sheet import ensure_headers, HEADERS
+    custom = HEADERS[:-2] + ["Next action", "Decision"]
+    ws = FakeWS([list(custom), ["u1"] + [""] * (len(custom) - 1)])
+    ensure_headers(ws)
+    assert ws.rows[0] == custom + ["Lane", "Flags"]
+    assert ws.rows[1][0] == "u1"

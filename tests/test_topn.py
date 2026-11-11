@@ -47,9 +47,11 @@ def test_eligible_drops_done_and_too_early_terms():
     assert topn.eligible(row())
     assert not topn.eligible(row(Applied="TRUE"))
     assert not topn.eligible(row(Status="Closed"))
-    assert not topn.eligible(row(Term="Winter 2027"))
-    assert not topn.eligible(row(Term="Jan 2027, 12 months"))
-    assert not topn.eligible(row(Term="Winter Co-op"))
+    assert not topn.eligible(row(Term="Fall 2026"))
+    # since Nov 2026, winter and early-2027 starts are fine
+    assert topn.eligible(row(Term="Winter 2027"))
+    assert topn.eligible(row(Term="Jan 2027, 12 months"))
+    assert topn.eligible(row(Term="Winter Co-op"))
     assert topn.eligible(row(Term="not stated"))
 
 
