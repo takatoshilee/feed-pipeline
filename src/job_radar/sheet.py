@@ -112,6 +112,13 @@ def ensure_headers(ws) -> None:
     if len(current) < len(HEADERS) and HEADERS[:len(current)] == current:
         for i in range(len(current) + 1, len(HEADERS) + 1):
             ws.update_cell(1, i, HEADERS[i - 1])
+        return
+    # A tracker with columns of its own (e.g. 'Next action' added by hand or another tool):
+    # add any of our columns it lacks after its last column, leaving the rest alone.
+    if "uid" in current:
+        missing = [h for h in HEADERS if h not in current]
+        for i, h in enumerate(missing, start=len(current) + 1):
+            ws.update_cell(1, i, h)
 
 
 def _loc(location: str) -> str:
