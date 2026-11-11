@@ -39,6 +39,8 @@ class Score:
     ok: bool = field(default=True, compare=False)  # False => scoring errored (value is not a real fit)
     resume: str = field(default="", compare=False)  # which resume to use: "swe" | "ai" | ""
     term: str = field(default="", compare=False)    # work-term timing as stated in the posting
+    lane: str = field(default="", compare=False)    # role family: data, ml, product, marketing, design, swe, other
+    flags: list[str] = field(default_factory=list, compare=False)  # e.g. "low-level"
 
 
 @dataclass(frozen=True)
@@ -53,3 +55,7 @@ class Profile:
     digest_threshold: int = 50
     high_score: int = 80
     high_fresh_hours: int = 2
+    # "filter": a location outside locations_allow (or in locations_block) is dropped.
+    # "rank": any location passes, but outside locations_allow only student-titled roles
+    # (intern, co-op...) are scored, and the Top 30 ranks them lower instead of dropping them.
+    locations_mode: str = "filter"

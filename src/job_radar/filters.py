@@ -41,25 +41,72 @@ def visa_note(location: str) -> str:
     return ""
 
 
+# Title words that mark a student role. Outside the preferred locations (locations_mode
+# "rank") only these get scored, so the LLM isn't spent on every full-time job worldwide.
+STUDENT_TERMS = ("intern", "internship", "co-op", "co op", "coop", "student", "new grad",
+                 "new-grad", "werkstudent", "trainee", "apprentice", "placement", "summer analyst")
+
+
+def _word_re(term: str):
+    """Match a config term as whole word(s): 'sales' hits 'Sales Intern' but not
+    'Salesforce', 'lead' hits 'Tech Lead' but not 'Leadership'. A trailing 's' is allowed
+    so 'intern' still matches 'Interns'. Padding spaces in old config (' ml ') are ignored."""
+    t = re.escape(term.strip())
+    return re.compile(rf"(?<![a-z0-9]){t}s?(?![a-z0-9])")
+
+
+_WORD_CACHE: dict = {}
+
+
+def has_word(text: str, terms) -> bool:
+    for term in terms:
+        if not term.strip():
+            continue
+        rx = _WORD_CACHE.get(term)
+        if rx is None:
+            rx = _WORD_CACHE[term] = _word_re(term)
+        if rx.search(text):
+            return True
+    return False
+
+
+def location_tier(location: str, profile: Profile) -> str:
+    """'prefer' (Canada / remote / no location), 'us', or 'other'. Used to rank and to
+    decide pings; it never drops anything by itself."""
+    loc = (location or "").lower().strip()
+    if not loc or not profile.locations_allow or any(a in loc for a in profile.locations_allow):
+        if not _location_blocked(loc, profile.locations_block):
+            return "prefer"
+    if any(u in loc for u in _US_HINT) or _location_blocked(loc, ("us", "usa")):
+        return "us"
+    return "other"
+
+
 def passes_rules(posting: Posting, profile: Profile, now: datetime | None = None) -> bool:
     now = now or datetime.now(timezone.utc)
     title = posting.title.lower()
 
-    # Exclusions win outright.
-    if any(x in title for x in profile.title_exclude):
+    # Exclusions win outright. Whole words only (see _word_re).
+    if has_word(title, profile.title_exclude):
         return False
 
     # Must match at least one include keyword (if any are configured).
-    if profile.title_include and not any(x in title for x in profile.title_include):
+    if profile.title_include and not has_word(title, profile.title_include):
         return False
 
     # Location: only evaluated when the posting has a location string.
     loc = (posting.location or "").lower().strip()
     if loc:
-        if profile.locations_allow and not any(a in loc for a in profile.locations_allow):
-            return False
-        if _location_blocked(loc, profile.locations_block):
-            return False
+        if profile.locations_mode == "rank":
+            # Any country is allowed, ranked lower later. Outside the preferred places only
+            # student roles go on to scoring.
+            if location_tier(loc, profile) != "prefer" and not has_word(title, STUDENT_TERMS):
+                return False
+        else:
+            if profile.locations_allow and not any(a in loc for a in profile.locations_allow):
+                return False
+            if _location_blocked(loc, profile.locations_block):
+                return False
 
     # Freshness: only evaluated when posted_at is known.
     if posting.posted_at is not None:

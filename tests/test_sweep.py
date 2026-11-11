@@ -58,7 +58,7 @@ def test_rolekey_unpacks_feeds_and_drops_season():
 
 def test_scorecache_roundtrip_and_prune(tmp_path):
     c = ScoreCache(str(tmp_path / "s.json"))
-    c.put("a", 40, NOW - timedelta(days=200))
+    c.put("a", 40, NOW - timedelta(days=500))
     c.put("b", 70, NOW)
     c.save(now=NOW)
     d = ScoreCache(str(tmp_path / "s.json")).load()
@@ -71,7 +71,7 @@ async def test_sweep_scores_old_unseen_roles_once(tmp_path, monkeypatch):
              P("greenhouse:c:3", "ML Intern"),                      # already in the Sheet
              P("greenhouse:c:4", "Data Intern"),                    # scored before
              P("simplify:simplify:9", "c: Software Intern", ats="simplify", company="simplify"),
-             P("greenhouse:c:5", "Winter 2027 Intern")]             # term he can't take
+             P("greenhouse:c:5", "Fall 2026 Intern")]               # term already started
 
     async def fake_fetch_all(companies, **kw):
         return posts, []

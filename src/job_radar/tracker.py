@@ -97,15 +97,16 @@ def apply_sort_key(row, today: date):
     return (done, wrong_term(row), priority_rank(row), urgent, deadline_order, -fit(row))
 
 
-# Work terms Taka cannot take: anything starting before May 2027 (he is in classes
-# through April 2027). Bad-term rows sink in the sort, never ping, and stay out of
-# the pending counts; the Sheet keeps them (amber) as a safety net.
-_BAD_TERM_TOKENS = ("2024", "2025", "2026", "winter 2027", "spring 2027")
-_BAD_2027 = ("winter 2027", "spring 2027")
+# Work terms Taka cannot take: terms that have already started (2026 or earlier). Since
+# Nov 2026 a Winter / Spring 2027 term counts as fine (he may be able to work then).
+# Bad-term rows sink in the sort, never ping, and stay out of the pending counts; the
+# Sheet keeps them (amber) as a safety net.
+_BAD_TERM_TOKENS = ("2024", "2025", "2026")
+_BAD_2027: tuple = ()
 
 
 def bad_term_text(term) -> bool:
-    """True if a stated work term starts before Summer 2027. Undated / 'not stated'
+    """True if a stated work term starts in 2026 or earlier. Undated / 'not stated'
     counts as viable, early postings usually just don't print the season."""
     t = (term or "").strip().lower()
     if not t or "not stated" in t:

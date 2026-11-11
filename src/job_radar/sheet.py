@@ -12,7 +12,7 @@ from .models import Posting, Score
 # all_records read the LIVE header, so writes stay correct even if he drags columns around.
 HEADERS = ["uid", "Company", "Role", "Applied", "Fit", "Resume", "Term", "Why", "Link",
            "Location", "Posted", "Status", "Deadline", "Priority", "Notes", "Applied on",
-           "Added on"]
+           "Added on", "Lane", "Flags"]
 
 
 TOP_TAB = "Top 30"   # generated ranking tab (write_top); never the tracker
@@ -146,7 +146,7 @@ def _row_dict(posting: Posting, score: Score, added_on: str = "") -> dict:
             "Why": score.reason, "Link": posting.url, "Location": posting.location,
             "Posted": posted, "Status": "New", "Deadline": "", "Priority": "",
             "Notes": visa_note(posting.location), "Applied on": "", "Added on": added_on,
-            "Applied": "FALSE"}
+            "Applied": "FALSE", "Lane": score.lane, "Flags": ", ".join(score.flags)}
 
 
 def _row_for_header(posting: Posting, score: Score, added_on: str, header: list) -> list:
@@ -317,3 +317,23 @@ def write_top(ws, today=None, prepare_url: str | None = None) -> int:
     tab.clear()
     tab.update(range_name="A1", values=values, value_input_option="USER_ENTERED")
     return len(ranked)
+
+
+RESCORE_COLS = ("Fit", "Why", "Term", "Resume", "Lane", "Flags")
+
+
+def rescore_updates(records, header, scores: dict) -> list:
+    """Cell updates that overwrite the scorer's columns for rows whose uid is in `scores`
+    (uid -> Score). Only Fit / Why / Term / Resume / Lane / Flags change; everything Taka
+    typed (Applied, Status, Deadline, Priority, Notes) is left alone. Header-aware."""
+    cols = {h: header.index(h) for h in RESCORE_COLS if h in header}
+    out = []
+    for i, r in enumerate(records, start=2):
+        sc = scores.get(str(r.get("uid", "")).strip())
+        if sc is None:
+            continue
+        vals = {"Fit": sc.value, "Why": sc.reason, "Term": sc.term,
+                "Resume": sc.resume.upper(), "Lane": sc.lane, "Flags": ", ".join(sc.flags)}
+        for h, c in cols.items():
+            out.append({"range": f"{_a1_col(c + 1)}{i}", "values": [[vals[h]]]})
+    return out

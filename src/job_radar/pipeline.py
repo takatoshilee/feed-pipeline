@@ -5,11 +5,11 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from .dedup import SeenStore
-from .filters import passes_rules
+from .filters import location_tier, passes_rules
 from .models import Score, Urgency
 from .notify import ConsoleNotifier, DiscordNotifier
 from .scorer import (BedrockProvider, ClaudeProvider, FallbackProvider, GeminiProvider,
-                     HeuristicProvider, heuristic_score)
+                     HeuristicProvider, heuristic_score, is_ai_score)
 from .sources import enrich_postings, fetch_all
 from .tracker import bad_term_text
 from .urgency import classify
@@ -191,7 +191,7 @@ async def backfill(config, *, provider=None, sheet_sink=None, now=None,
         # Inventory gate: a real score (not an error) at or above min_fit. Unlike the cron
         # we don't apply the dream-tier bypass here, since a weak/unscored dream role isn't
         # worth a row in a bulk load.
-        if score.ok and score.value >= min_fit:
+        if is_ai_score(score) and score.value >= min_fit:
             sheet_sink.add(p, score)
     try:
         tracked = await asyncio.to_thread(sheet_sink.flush)  # one batched write
@@ -213,7 +213,7 @@ async def backfill(config, *, provider=None, sheet_sink=None, now=None,
 
 
 SWEEP_CAP = int(os.environ.get("SWEEP_CAP", "150"))
-SWEEP_DAYS = 75     # still-open roles up to this old get a look in the daily sweep
+SWEEP_DAYS = 365    # any still-open role gets a look in the daily sweep, however old
 
 
 async def sweep(config, *, provider=None, sheet_sink=None, cache=None, now=None,
@@ -269,8 +269,8 @@ async def sweep(config, *, provider=None, sheet_sink=None, cache=None, now=None,
 
     added = 0
     for p, score in scored:
-        if not score.ok:
-            continue                         # retried tomorrow: not cached
+        if not is_ai_score(score):
+            continue                         # error or keyword backup: retried tomorrow, not cached
         for uid in copies.get(rolekey.key(p.company, p.title), [p.uid]):
             cache.put(uid, score.value, now)
         if score.value >= min_fit and not bad_term_text(score.term):
@@ -302,6 +302,50 @@ async def sweep(config, *, provider=None, sheet_sink=None, cache=None, now=None,
     sheet_errors = [e for e in errors if e[0] == "sheet"]
     if sheet_errors:
         print("sheet errors:", sheet_errors)
+    return stats
+
+
+RESCORE_CAP = int(os.environ.get("RESCORE_CAP", "400"))
+
+
+async def rescore(config, *, provider=None, sheet_sink=None, now=None):
+    """One-off: re-score the OPEN rows already in the Sheet with the current scorer and
+    profile, in place. Only the scorer's columns change (Fit, Why, Term, Resume, Lane,
+    Flags); Applied, Status, Deadline, Priority and Notes are never touched. Rows whose
+    posting can't be fetched right now are left as they are. No Discord pings."""
+    from . import sheet as sheet_mod
+    from .tracker import PENDING, status
+    now = now or datetime.now(timezone.utc)
+    profile, companies, settings = config.profile, config.companies, config.settings
+    provider = provider or build_provider(settings)
+    if sheet_sink is None:
+        sheet_sink = build_sheet_sink(settings)
+    if sheet_sink is None:
+        raise SystemExit("rescore: no Sheet configured "
+                         "(set GOOGLE_SHEET_ID and GOOGLE_CREDENTIALS_PATH)")
+    ws = sheet_sink.ws
+    cmap = _company_map(companies)
+    records = await asyncio.to_thread(sheet_mod.all_records, ws)
+    open_uids = {str(r.get("uid", "")).strip() for r in records if status(r) == PENDING}
+    postings, errors = await fetch_all(companies)
+    by_uid = {p.uid: p for p in _dedup_by_uid(postings)}
+    todo = [by_uid[u] for u in open_uids if u in by_uid][:RESCORE_CAP]
+    todo = await enrich_postings(todo, cmap)
+    scored = await _score_all(provider, todo, profile)
+    scores = {p.uid: s for p, s in scored if is_ai_score(s)}
+    header = ws.row_values(1) or sheet_mod.HEADERS
+    updates = sheet_mod.rescore_updates(records, header, scores)
+    if updates:
+        await asyncio.to_thread(ws.batch_update, updates, value_input_option="USER_ENTERED")
+    try:
+        await asyncio.to_thread(sheet_mod.write_top, ws, None,
+                                os.environ.get("PREPARE_URL") or None)
+    except Exception as e:
+        errors.append(("sheet", f"write_top: {e!r}"))
+    stats = {"open_rows": len(open_uids), "found_open": sum(1 for u in open_uids if u in by_uid),
+             "scored": len(scored), "rescored": len(scores),
+             "score_errors": len(scored) - len(scores)}
+    print("job-radar RESCORE:", stats)
     return stats
 
 
@@ -374,7 +418,12 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
         # Sheet gets every genuinely-good match (>= SHEET_MIN_FIT), INDEPENDENT of whether
         # it's ping-worthy, so it stays the full triage list even with a high ping bar. Skip
         # error scores (e.g. an LLM 429) so nothing lands as a bogus Fit 0 row.
-        if sheet_sink is not None and score.ok and score.value >= SHEET_MIN_FIT:
+        # A keyword-backup score (LLM down) never reaches the Sheet or Discord: it is not a
+        # real judgement, and a generic "Software Engineer Intern" scores high on keywords.
+        # The daily sweep scores the role properly later (it isn't in the Sheet or cache).
+        if not is_ai_score(score):
+            continue
+        if sheet_sink is not None and score.value >= SHEET_MIN_FIT:
             sheet_sink.add(p, score)
         # HARD term gate: a role whose stated term starts before Summer 2027 never pings
         # or hits the digest, however well it scores. (It's still in the Sheet, amber and
@@ -383,6 +432,10 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
             continue
         level = classify(p, score, company, profile, now)
         if level is None:
+            continue
+        # Roles outside Canada / remote / the US go to the Sheet (ranked lower there) but
+        # don't ping: pings stay for places he can most likely work.
+        if location_tier(p.location, profile) == "other":
             continue
         if level == Urgency.LOW:
             digest.append((p, score, company))

@@ -139,7 +139,7 @@ def test_pending_count_and_last_active():
 def test_wrong_term_sinks_untakeable_seasons():
     from job_radar.tracker import wrong_term
     assert wrong_term({"Term": "Fall 2026"}) == 1
-    assert wrong_term({"Term": "Winter 2027 (Jan-Apr)"}) == 1
+    assert wrong_term({"Term": "Winter 2027 (Jan-Apr)"}) == 0
     assert wrong_term({"Term": "Summer 2027 (May-Aug)"}) == 0
     assert wrong_term({"Term": "16-month, May 2027-Aug 2028"}) == 0
     assert wrong_term({"Term": "not stated"}) == 0
@@ -161,8 +161,9 @@ def test_apply_sort_sinks_wrong_term_but_keeps_it_above_done():
 def test_bad_term_text_hard_gate():
     from job_radar.tracker import bad_term_text
     assert bad_term_text("Fall 2026") is True
-    assert bad_term_text("Winter 2027 (Jan-Apr)") is True
-    assert bad_term_text("Spring 2027") is True
+    assert bad_term_text("Winter 2026") is True
+    assert bad_term_text("Winter 2027 (Jan-Apr)") is False
+    assert bad_term_text("Spring 2027") is False
     assert bad_term_text("Summer 2027 (May-Aug)") is False
     assert bad_term_text("Fall 2027, 12 months") is False
     assert bad_term_text("16-month, May 2027-Aug 2028") is False

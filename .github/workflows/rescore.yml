@@ -1,0 +1,66 @@
+name: rescore-open
+# One-off, run by hand after the scorer or profile changes: re-scores the open rows
+# already in the Sheet, in place. Never pings Discord.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sweep   # shares the sweep group so the two never write at once
+  cancel-in-progress: false
+
+jobs:
+  rescore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20   # fetch all boards + LLM-score the open rows (RESCORE_CAP)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch private config
+        uses: actions/checkout@v4
+        with:
+          repository: takatoshilee/job-radar-config
+          ssh-key: ${{ secrets.CONFIG_DEPLOY_KEY }}
+          path: .private-config
+      - name: Install private config
+        run: |
+          cp .private-config/companies.yaml config/companies.yaml
+          cp .private-config/profile.yaml config/profile.yaml
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - run: pip install -e ".[sheet,bedrock]"
+
+      - name: Write Google credentials
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          if [ -n "$GOOGLE_CREDENTIALS" ]; then
+            printf '%s' "$GOOGLE_CREDENTIALS" > google-creds.json
+            echo "wrote google-creds.json"
+          else
+            echo "ERROR: GOOGLE_CREDENTIALS secret missing; the sweep writes to the Sheet" && exit 1
+          fi
+
+      - name: Re-score open rows
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_CREDENTIALS_PATH: google-creds.json
+          PREPARE_URL: ${{ vars.PREPARE_URL }}
+        run: |
+          set -o pipefail
+          python -m job_radar --rescore-open | tee rescore.log
+          { echo '```'; grep -E "RESCORE|sheet errors" rescore.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

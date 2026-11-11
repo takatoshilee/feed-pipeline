@@ -8,31 +8,58 @@ from .models import Posting, Profile, Score
 # --- shared prompt pieces (provider-neutral) ---
 
 INSTRUCTIONS = (
-    "You screen internship / new-grad postings for ONE specific candidate (described "
-    "below). Read the role's actual requirements and qualifications, then score 0-100 by "
-    "judging TWO things together:\n"
-    "1) REALISTIC CHANCE: would this candidate plausibly be competitive? Compare the "
-    "stated requirements to the candidate's real skills and year in school. Heavily "
-    "penalize roles that need a domain or skill the candidate does NOT list (e.g. "
-    "Android/iOS/mobile, embedded/firmware/hardware, kernel, game/graphics, a specific "
-    "language they never mention), senior/staff/manager titles, security clearance, or "
-    "several years of experience. A role titled 'Software Engineer Intern' in a domain "
-    "they have no background in is a WEAK match, not a strong one, even though the title "
-    "looks right.\n"
-    "2) GOOD FOR THEM: reward strong overlap with the candidate's listed strengths and "
-    "target roles (SWE / AI-ML / data). Give PARTIAL credit to sensible tangential "
-    "stretches that still use those strengths (e.g. a data or full-stack role at an AI "
-    "company). Be calibrated: most postings should land 30-70; reserve 80+ for genuinely "
-    "strong, realistic matches.\n"
-    "Respond as JSON {score, reason, tags, resume, term}; reason = one short sentence naming "
-    "the key fit or gap; tags = a few lowercase labels; resume = which of the candidate's two "
-    "resumes to use for this role: \"ai\" for AI / ML / research / data-science / ML-"
-    "engineering roles, or \"swe\" for general software-engineering / backend / full-stack / "
-    "developer roles; term = the work-term timing EXACTLY as the posting states it — season "
-    "+ year and start/end or length if given (e.g. \"Summer 2027 (May-Aug)\", \"Fall 2027, "
-    "4 months\", \"16-month, May 2027-Aug 2028\"); use \"not stated\" if the posting gives no "
-    "dates/season."
+    "You screen job postings for ONE specific candidate (described below). Read the whole "
+    "posting, then answer a few separate questions about it. Do NOT give an overall score; "
+    "the overall score is computed from your answers, so answer each one on its own.\n"
+    "- student_role (true/false): is this an internship, co-op, placement, or otherwise "
+    "explicitly open to current undergraduates? A plain full-time title with no student "
+    "wording is false.\n"
+    "- blocker: \"\" if none, else ONE of \"grad_degree\" (requires a Master's/PhD), "
+    "\"citizenship\" (US citizenship, clearance, permanent residency, or explicitly no visa "
+    "sponsorship), \"past_term\" (the work term starts before the earliest start the "
+    "candidate profile allows), \"senior\" (needs 3+ years or a senior/staff/manager level).\n"
+    "- requirements_met (0-10): how many of the posting's stated must-have requirements the "
+    "candidate meets today, judged only from the skills and experience in the profile. 10 = "
+    "meets all, 5 = about half, 0 = none. Missing a core domain skill (e.g. a language, "
+    "tool or field they never list) costs a lot.\n"
+    "- interest (0-10): how well the role's day-to-day work matches the candidate's target "
+    "lanes and preferences in the profile. 10 = exactly what they want, 5 = acceptable, "
+    "0 = work they said they don't want.\n"
+    "- lane: the role family, one of \"data\", \"ml\", \"product\", \"marketing\", "
+    "\"design\", \"swe\", \"other\".\n"
+    "- low_level (true/false): is the core work compilers, kernels, drivers, embedded, "
+    "firmware, hardware or chip design, or low-level performance tuning? Judge from the "
+    "duties, not the company.\n"
+    "Use the full 0-10 range and different values for different postings; avoid giving "
+    "every decent posting the same numbers.\n"
+    "Respond as JSON {student_role, blocker, requirements_met, interest, lane, low_level, "
+    "reason, tags, resume, term}; reason = one short sentence naming the key fit or gap; "
+    "tags = a few lowercase labels; resume = which of the candidate's two resumes is closer: "
+    "\"ai\" for AI / ML / data-science / analytics / research roles, \"swe\" for software, "
+    "product, design or other roles; term = the work-term timing EXACTLY as the posting states "
+    "it, season + year and start/end or length if given (e.g. \"Summer 2027 (May-Aug)\", "
+    "\"Fall 2027, 4 months\", \"16-month, May 2027-Aug 2028\"); use \"not stated\" if the "
+    "posting gives no dates or season."
 )
+
+DESC_CHARS = 6000   # how much of the posting the LLM reads (term and eligibility sit low down)
+LANES = ("data", "ml", "product", "marketing", "design", "swe", "other")
+BLOCKERS = ("grad_degree", "citizenship", "past_term", "senior")
+
+
+def compute_fit(student_role: bool, blocker: str, requirements_met: float,
+                interest: float, low_level: bool) -> int:
+    """The overall 0-100 fit, from the LLM's separate answers. Chance and interest weigh
+    the same (each 0-10 -> up to 45 points). A non-student role or a hard blocker caps
+    the score at 30 (still visible, never pinged); low-level work loses 15."""
+    req = max(0.0, min(10.0, float(requirements_met)))
+    want = max(0.0, min(10.0, float(interest)))
+    fit = 5 + 4.5 * req + 4.5 * want
+    if low_level:
+        fit -= 15
+    if not student_role or blocker:
+        fit = min(fit, 30)
+    return int(round(max(0, min(100, fit))))
 
 
 def _candidate_block(profile: Profile) -> str:
@@ -40,7 +67,7 @@ def _candidate_block(profile: Profile) -> str:
 
 
 def _posting_block(posting: Posting) -> str:
-    desc = (posting.description or "")[:1500]
+    desc = (posting.description or "")[:DESC_CHARS]
     return (f"POSTING:\nCompany: {posting.company}\nTitle: {posting.title}\n"
             f"Location: {posting.location}\nDescription: {desc}")
 
@@ -81,21 +108,50 @@ def _extract_json(text: str) -> dict:
         return {}
 
 
+def _num(v, default=0.0) -> float:
+    try:
+        return float(str(v).strip().rstrip("%"))
+    except (TypeError, ValueError):
+        return default
+
+
+def _bool(v) -> bool:
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() in ("true", "yes", "1")
+
+
 def _coerce_score(obj) -> Score:
     if not isinstance(obj, dict) or not obj:
         return Score(value=0, reason="unparseable LLM response", tags=[], ok=False)
-    try:
-        # Tolerate ints, int-strings, floats, and percentages like "85%" / "80.5".
-        val = int(round(float(str(obj.get("score", 0)).strip().rstrip("%") or 0)))
-    except (TypeError, ValueError):
-        val = 0
-    val = max(0, min(100, val))
     reason = str(obj.get("reason", ""))[:300]
     tags = [str(t) for t in obj.get("tags", []) if isinstance(t, (str, int))][:8]
     resume = str(obj.get("resume", "")).strip().lower()
     resume = resume if resume in ("ai", "swe") else ""
     term = str(obj.get("term", "")).strip()[:80]
-    return Score(value=val, reason=reason, tags=tags, resume=resume, term=term)
+    lane = str(obj.get("lane", "")).strip().lower()
+    lane = lane if lane in LANES else ""
+    flags = []
+    if "requirements_met" in obj or "interest" in obj:
+        blocker = str(obj.get("blocker", "") or "").strip().lower()
+        blocker = blocker if blocker in BLOCKERS else ""
+        low = _bool(obj.get("low_level", False))
+        student = _bool(obj.get("student_role", True))
+        val = compute_fit(student, blocker, _num(obj.get("requirements_met")),
+                          _num(obj.get("interest")), low)
+        if low:
+            flags.append("low-level")
+        if blocker:
+            flags.append(blocker.replace("_", " "))
+        if not student:
+            flags.append("not a student role")
+    else:
+        # Older single-number answer (kept so a provider that ignores the new fields
+        # still yields a usable score).
+        val = int(round(_num(obj.get("score", 0))))
+    val = max(0, min(100, val))
+    return Score(value=val, reason=reason, tags=tags, resume=resume, term=term,
+                 lane=lane, flags=flags)
 
 
 # --- Gemini (REST) ---
@@ -104,13 +160,19 @@ GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:ge
 GEMINI_SCHEMA = {
     "type": "OBJECT",
     "properties": {
-        "score": {"type": "INTEGER"},
+        "student_role": {"type": "BOOLEAN"},
+        "blocker": {"type": "STRING"},
+        "requirements_met": {"type": "INTEGER"},
+        "interest": {"type": "INTEGER"},
+        "lane": {"type": "STRING"},
+        "low_level": {"type": "BOOLEAN"},
         "reason": {"type": "STRING"},
         "tags": {"type": "ARRAY", "items": {"type": "STRING"}},
         "resume": {"type": "STRING"},
         "term": {"type": "STRING"},
     },
-    "required": ["score", "reason", "tags", "resume", "term"],
+    "required": ["student_role", "blocker", "requirements_met", "interest", "lane",
+                 "low_level", "reason", "tags", "resume", "term"],
 }
 
 
@@ -180,7 +242,7 @@ class ClaudeProvider:
         }]
         body = {
             "model": self.model,
-            "max_tokens": 300,
+            "max_tokens": 500,
             "system": system,
             "messages": [{"role": "user", "content": _posting_block(posting)}],
         }
@@ -231,7 +293,7 @@ class BedrockProvider:
         def call():
             return self._bedrock().converse(
                 modelId=self.model, system=system, messages=messages,
-                inferenceConfig={"maxTokens": 400, "temperature": 0.2})
+                inferenceConfig={"maxTokens": 500, "temperature": 0.2})
 
         try:
             resp = await asyncio.to_thread(call)
@@ -263,6 +325,15 @@ _MISMATCH = ("android", "ios", "mobile", "embedded", "firmware", "hardware", "fp
              "unreal engine", "shader")
 
 
+HEURISTIC_TAG = "heuristic"
+
+
+def is_ai_score(score: Score) -> bool:
+    """True for a real LLM score. A keyword-backup score is good for ordering a queue but
+    is never written to the Sheet or pinged: the daily sweep scores that role properly."""
+    return score.ok and HEURISTIC_TAG not in (score.tags or [])
+
+
 def heuristic_score(posting: Posting, profile: Profile) -> Score:
     """Deterministic 0-100 fit estimate from title and skill signals, for when the LLM is
     unavailable (rate-limited or no key). Lower precision than the LLM, but it keeps the
@@ -287,7 +358,7 @@ def heuristic_score(posting: Posting, profile: Profile) -> Score:
 
     score = max(0, min(100, score))
     return Score(value=score, reason="heuristic (LLM unavailable): title + skill match",
-                 tags=["heuristic"], ok=True)
+                 tags=[HEURISTIC_TAG], ok=True)
 
 
 class HeuristicProvider:
