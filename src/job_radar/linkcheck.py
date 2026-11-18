@@ -28,6 +28,8 @@ CONCURRENCY = 12
 PER_SITE = 3                # at most this many requests in flight to one site (Workday 429s)
 RETRIES = 2                 # extra tries after a 429 or 503, with backoff
 BACKOFF = 2.0               # seconds, doubled each retry
+# Sites that rate-limit hard: one request at a time, at least this many seconds apart.
+SLOW_SITES = {"myworkdayjobs.com": 1.0, "myworkdaysite.com": 1.0}
 
 # Text that job sites show on a closed posting. Lower-case. Kept specific on purpose:
 # a footer like "can't find the job you are looking for?" must not match.
@@ -194,11 +196,14 @@ class Checker:
         self._ashby_lock = asyncio.Lock()
         self._sites: dict = {}
 
-    def _site_sem(self, url) -> asyncio.Semaphore:
+    def _site(self, url) -> str:
         host = (urlparse(url).hostname or "").lower()
-        site = ".".join(host.split(".")[-2:])       # every *.myworkdayjobs.com shares one
+        return ".".join(host.split(".")[-2:])       # every *.myworkdayjobs.com shares one
+
+    def _site_sem(self, url) -> asyncio.Semaphore:
+        site = self._site(url)
         if site not in self._sites:
-            self._sites[site] = asyncio.Semaphore(PER_SITE)
+            self._sites[site] = asyncio.Semaphore(1 if site in SLOW_SITES else PER_SITE)
         return self._sites[site]
 
     async def _get(self, url, *, accept="application/json", ua=USER_AGENT):
@@ -210,6 +215,9 @@ class Checker:
             async with self._site_sem(url):
                 r = await self.client.get(url, headers={"User-Agent": ua, "Accept": accept},
                                           timeout=TIMEOUT, follow_redirects=True)
+                gap = SLOW_SITES.get(self._site(url), 0) * (0 if self.backoff == 0 else 1)
+                if gap:
+                    await asyncio.sleep(gap)
             if r.status_code not in (429, 503) or attempt == RETRIES:
                 return r
             ra = r.headers.get("Retry-After", "")
