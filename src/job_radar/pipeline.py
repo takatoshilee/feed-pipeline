@@ -508,3 +508,72 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
     if errors:
         print("errors (first 10):", errors[:10])
     return stats
+
+
+# Safety valve for --check-links: if more than this share of the open rows would close in
+# one run, something is wrong with the check (a site blocking us, a changed error page),
+# not with the jobs, so nothing is written and the run says why.
+LINKCHECK_MAX_CLOSE_SHARE = float(os.environ.get("LINKCHECK_MAX_CLOSE_SHARE", "0.8"))
+
+
+async def check_links(config, *, dry_run=False, ws=None, client=None):
+    """Daily: open every open row's link and mark the dead ones Closed, then rebuild the
+    Top 30 tab. With --dry-run it only prints what it would close. (Its own flag, not
+    settings.dry_run, which is also true whenever no Discord webhook is set.) Never pings Discord,
+    never touches rows Taka has applied to, skipped or already closed."""
+    from collections import Counter
+    from urllib.parse import urlparse
+
+    import httpx
+
+    from . import linkcheck, sheet as sheet_mod
+    settings = config.settings
+    if ws is None:
+        sink = build_sheet_sink(settings)
+        if sink is None:
+            raise SystemExit("check-links: no Sheet configured "
+                             "(set GOOGLE_SHEET_ID and GOOGLE_CREDENTIALS_PATH)")
+        ws = sink.ws
+    header = ws.row_values(1)
+    rows = linkcheck.open_rows(sheet_mod.all_records(ws))
+    own_client = client is None
+    client = client or httpx.AsyncClient(timeout=linkcheck.TIMEOUT,
+                                         limits=httpx.Limits(max_connections=linkcheck.CONCURRENCY))
+    try:
+        results = await linkcheck.check_rows(rows, client)
+    finally:
+        if own_client:
+            await client.aclose()
+
+    counts = linkcheck.summary(results)
+    print("LINKCHECK", {"checked": len(results), **counts})
+    by_host = Counter()
+    for _, r, res in results:
+        host = (urlparse(str(r.get("Link", ""))).hostname or "?").split(".", 1)[-1]
+        by_host[(host, res.verdict)] += 1
+    for (host, verdict), n in sorted(by_host.items(), key=lambda x: -x[1])[:40]:
+        print(f"  {n:4d}  {verdict:7s}  {host}")
+    reasons = Counter(res.reason for _, _, res in results)
+    print("reasons:", dict(reasons.most_common(30)))
+    for i, r, res in results:
+        if res.verdict == linkcheck.CLOSED:
+            print(f"  close row {i}: {r.get('Company')} | {r.get('Role')} | {res.reason} | {r.get('Link')}")
+
+    updates = linkcheck.closed_updates(results, header)
+    if results and len(updates) / len(results) > LINKCHECK_MAX_CLOSE_SHARE:
+        print(f"LINKCHECK refused: {len(updates)} of {len(results)} would close, over the "
+              f"{LINKCHECK_MAX_CLOSE_SHARE:.0%} safety limit. Nothing written.")
+        return {**counts, "written": 0}
+    if dry_run:
+        print(f"LINKCHECK dry run: would mark {len(updates)} rows Closed")
+        return {**counts, "written": 0}
+    # Re-read just before writing: rows may have moved while the links were checked.
+    updates = linkcheck.closed_updates(results, ws.row_values(1), sheet_mod.all_records(ws))
+    if updates:
+        ws.batch_update(updates, value_input_option="USER_ENTERED")
+    try:
+        sheet_mod.write_top(ws, None, os.environ.get("PREPARE_URL") or None)
+    except Exception as e:
+        print("LINKCHECK write_top failed:", repr(e))
+    print(f"LINKCHECK marked {len(updates)} rows Closed")
+    return {**counts, "written": len(updates)}

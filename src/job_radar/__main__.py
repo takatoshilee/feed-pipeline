@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import replace
 
 from .config import load_config
-from .pipeline import backfill, preview, rescore, run, sweep
+from .pipeline import backfill, check_links, preview, rescore, run, sweep
 
 
 def _parse_args(argv=None):
@@ -30,6 +30,8 @@ def _parse_args(argv=None):
                     help="daily: score open roles never scored before, add good ones to the Sheet (no pings)")
     ap.add_argument("--rescore-open", action="store_true",
                     help="one-off: re-score the open Sheet rows in place with the current scorer (no pings)")
+    ap.add_argument("--check-links", action="store_true",
+                    help="daily: open each open Sheet row's link and mark dead jobs Closed (no pings)")
     ap.add_argument("--limit", type=int, help="only poll the first N companies (local testing)")
     ap.add_argument("--company", help="only poll this company slug (local testing)")
     return ap.parse_args(argv)
@@ -52,7 +54,9 @@ def main(argv=None):
         companies = companies[:args.limit]
 
     config = replace(config, companies=companies, settings=settings)
-    if args.preview:
+    if args.check_links:
+        asyncio.run(check_links(config, dry_run=args.dry_run))
+    elif args.preview:
         asyncio.run(preview(config))
     elif args.rescore_open:
         asyncio.run(rescore(config))

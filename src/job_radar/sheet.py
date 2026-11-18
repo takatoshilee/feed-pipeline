@@ -197,7 +197,11 @@ def set_deadline(ws, uid: str, deadline: str) -> bool:
 
 
 def all_records(ws) -> list:
-    return ws.get_all_records()
+    """Every data row as a dict of strings. gspread turns number-looking cells into ints
+    (a Company or Role of "2027", an empty-looking Lane), and the ranking code calls
+    .strip() on them, which crashed the Top 30 rebuild for days in Nov 2026."""
+    return [{k: ("" if v is None else str(v)) for k, v in r.items()}
+            for r in ws.get_all_records()]
 
 
 def mark_closed(ws, open_uids: set, ok_board_slugs: set) -> int:
