@@ -234,4 +234,4 @@ async def test_workday_checks_the_board_search():
         live = await c.check(f"{wd}/en-US/Site/job/Toronto/AI-Co-op_R-0000187401-1")
         gone = await c.check(f"{wd}/Site/job/Toronto/Old-Co-op_R999")
     assert live.verdict == OPEN and gone.verdict == CLOSED
-    assert seen == ["R-0000187401", "R999"]
+    assert seen == ["R-0000187401", "R999", "Old Co op"]

@@ -275,19 +275,28 @@ class Checker:
         search, req, path = ref
         # the "-1"/"-2" suffix marks per-location copies of one requisition
         base = re.sub(r"-\d{1,2}$", "", req)
-        body = {"appliedFacets": {}, "limit": 20, "offset": 0, "searchText": base}
-        async with self._site_sem(search):
-            r = await self.client.post(search, json=body, timeout=TIMEOUT,
-                                       headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-        if r.status_code != 200:
-            return None
-        try:
-            posts = (r.json() or {}).get("jobPostings") or []
-        except ValueError:
-            return None
-        paths = [(j.get("externalPath") or "") for j in posts]
-        if any(p == path or p.rsplit("_", 1)[-1].startswith(base) for p in paths):
-            return Result(OPEN, "workday board")
+        # Search by requisition id, then by title, before calling a job gone: some
+        # tenants don't index the id, and a wrong "Closed" hides a live job.
+        title = path.rsplit("/", 1)[-1].rsplit("_", 1)[0].replace("-", " ")
+        title = re.sub(r"\s+", " ", title).strip()
+        for text in (base, title):
+            if not text:
+                continue
+            body = {"appliedFacets": {}, "limit": 20, "offset": 0, "searchText": text}
+            async with self._site_sem(search):
+                r = await self.client.post(search, json=body, timeout=TIMEOUT,
+                                           headers={"User-Agent": USER_AGENT,
+                                                    "Accept": "application/json"})
+            if r.status_code != 200:
+                return None
+            try:
+                posts = (r.json() or {}).get("jobPostings") or []
+            except ValueError:
+                return None
+            if any((j.get("externalPath") or "") == path
+                   or (j.get("externalPath") or "").rsplit("_", 1)[-1].startswith(base)
+                   for j in posts):
+                return Result(OPEN, "workday board")
         return Result(CLOSED, "not on workday board")
 
     async def _ashby_ids(self, slug) -> set | None:
