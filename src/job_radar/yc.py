@@ -4,14 +4,18 @@ the watch-list, and tag them `yc: true` so the Top 30 ranks their roles up.
 Company list: the yc-oss mirror of YC's public company directory (hiring.json, rebuilt
 daily from ycombinator.com/companies). For each company we guess board slugs from its YC
 slug, its name and its website, and probe the ATS APIs the radar already polls (Ashby,
-Greenhouse, Lever). A guess only counts when the board's postings mention the company by
-name or domain, so a common-word slug ("loop", "hex") can't attach someone else's board.
+Greenhouse, Lever). A guess only counts with proof that the board is that company's: its
+website domain in the postings or on the hosted board page, or, for a distinctive name
+like "HackerRank", the name in the postings. A plain-word slug ("pulse", "atlas") with
+no website proof is skipped, and so is a board with far more openings than the company
+has people.
 
 Why not poll ycombinator.com/companies/<slug>/jobs directly: YC answers HTTP 429 after
 about 60 page loads (tested Nov 18 2026), so 1,400 company pages every 15 minutes is not
 an option. Companies that only post on Work at a Startup stay uncovered here.
 
-Existing watch-list entries that match a YC company just get `yc: true` added.
+Existing watch-list entries that match a YC company get `yc: true` added, with the same
+proof required when the name is a plain word.
 New boards are absorbed silently by the per-company prime on the next poll.
 
 Local: python -m job_radar.yc [--dry-run] [--max-companies N]
@@ -64,14 +68,53 @@ def _jobs(ats: str, data) -> list:
     return (data or {}).get("jobs") or []
 
 
-def mentions(company: dict, text: str) -> bool:
-    """Does the board's raw payload name this company (whole word) or its domain?"""
-    t = text.lower()
+PAGES = {   # the hosted board page, which names the company's own website
+    "ashby": "https://jobs.ashbyhq.com/{s}",
+    "greenhouse": "https://job-boards.greenhouse.io/{s}",
+    "lever": "https://jobs.lever.co/{s}",
+}
+
+
+def mentions_domain(company: dict, text: str) -> bool:
     dom = _domain(company.get("website", ""))
-    if dom and dom in t:
+    return bool(dom) and dom in text.lower()
+
+
+def distinctive(name: str) -> bool:
+    """'HackerRank', 'Apollo.io', 'Y Combinator 2' yes; 'Pulse', 'Atlas', 'Coast' no.
+    A plain word can be any company's board slug, so it needs the website as proof."""
+    name = (name or "").strip()
+    return bool(re.search(r"[A-Z]", name[1:]) or re.search(r"[^A-Za-z]", name))
+
+
+def too_big(company: dict, n_jobs: int) -> bool:
+    """A board with far more openings than the company has people is someone else's."""
+    size = company.get("team_size") or 0
+    return bool(size) and n_jobs > max(40, 3 * int(size))
+
+
+async def _get(client, url, sem):
+    async with sem:
+        try:
+            return await client.get(url, headers={"User-Agent": USER_AGENT})
+        except httpx.HTTPError:
+            return None
+
+
+async def verified(client, company: dict, ats: str, slug: str, payload_text: str, sem) -> bool:
+    """Is this live board really this company's? Proof, strongest first: the company's
+    domain in the postings, the domain on the hosted board page, or (distinctive names
+    only) the name in the postings."""
+    if mentions_domain(company, payload_text):
         return True
-    name = (company.get("name") or "").strip().lower()
-    return bool(name) and re.search(r"(?<![a-z0-9])" + re.escape(name) + r"(?![a-z0-9])", t) is not None
+    r = await _get(client, PAGES[ats].format(s=slug), sem)
+    if r is not None and r.status_code == 200 and mentions_domain(company, r.text):
+        return True
+    name = (company.get("name") or "").strip()
+    if distinctive(name):
+        pat = r"(?<![a-z0-9])" + re.escape(name.lower()) + r"(?![a-z0-9])"
+        return re.search(pat, payload_text.lower()) is not None
+    return False
 
 
 async def probe(client, company: dict, sem) -> dict | None:
@@ -79,47 +122,57 @@ async def probe(client, company: dict, sem) -> dict | None:
     best = None
     for slug in candidates(company):
         for ats, url in PROBES.items():
-            async with sem:
-                try:
-                    r = await client.get(url.format(s=slug),
-                                         headers={"User-Agent": USER_AGENT,
-                                                  "Accept": "application/json"})
-                except httpx.HTTPError:
-                    continue
-            if r.status_code != 200:
+            r = await _get(client, url.format(s=slug), sem)
+            if r is None or r.status_code != 200:
                 continue
             try:
                 jobs = _jobs(ats, r.json())
             except ValueError:
                 continue
-            if not jobs or not mentions(company, r.text):
+            if not jobs or too_big(company, len(jobs)):
                 continue
-            if best is None or len(jobs) > best["jobs"]:
+            if best is not None and len(jobs) <= best["jobs"]:
+                continue
+            if await verified(client, company, ats, slug, r.text, sem):
                 best = {"slug": slug, "ats": ats, "jobs": len(jobs)}
         if best:
             return best          # stop at the first slug that resolved; later guesses are weaker
     return None
 
 
-def tag_existing(existing: list[dict], yc_companies: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Set yc: true on watch-list entries whose slug matches a YC company's candidates.
-    Returns (YC companies NOT on the watch-list yet, entries newly tagged)."""
+def match_existing(existing: list[dict], yc_companies: list[dict]):
+    """Pair YC companies with watch-list entries whose slug matches one of their
+    candidates. Returns (YC companies NOT on the watch-list, [(yc_company, entry), ...])."""
     by_slug = {}
     for c in existing:
         if str(c.get("ats", "")).lower() in AGGREGATORS:
             continue
         by_slug.setdefault(norm(str(c["slug"])), []).append(c)
-    missing, tagged = [], []
+    missing, pairs = [], []
     for yc in yc_companies:
-        hits = [c for s in candidates(yc) for c in by_slug.get(norm(s), [])]
+        hits = []
+        for s in candidates(yc):
+            for c in by_slug.get(norm(s), []):
+                if c not in hits:
+                    hits.append(c)
         if not hits:
             missing.append(yc)
-            continue
-        for c in hits:
-            if not c.get("yc"):
-                c["yc"] = True
-                tagged.append(c)
-    return missing, tagged
+        pairs.extend((yc, c) for c in hits)
+    return missing, pairs
+
+
+async def confirm(client, company: dict, entry: dict, sem) -> bool:
+    """Should this existing entry get yc: true? A distinctive name is enough; a plain
+    word ('radar', 'magic') needs the same website proof as a new board."""
+    if distinctive(company.get("name", "")):
+        return True
+    ats, slug = str(entry["ats"]).lower(), str(entry["slug"])
+    if ats not in PROBES:
+        return False             # Workday etc.: no cheap proof, leave it untagged
+    r = await _get(client, PROBES[ats].format(s=slug), sem)
+    if r is None or r.status_code != 200:
+        return False
+    return await verified(client, company, ats, slug, r.text, sem)
 
 
 async def run(companies_path="config/companies.yaml", *, dry_run=False, max_companies=None,
@@ -134,8 +187,14 @@ async def run(companies_path="config/companies.yaml", *, dry_run=False, max_comp
         yc_companies = [c for c in resp.json() if c.get("status", "Active") == "Active"]
         if max_companies:
             yc_companies = yc_companies[:max_companies]
-        missing, tagged = tag_existing(existing, yc_companies)
+        missing, pairs = match_existing(existing, yc_companies)
         sem = asyncio.Semaphore(16)   # polite to the ATS APIs
+        oks = await asyncio.gather(*[confirm(client, y, e, sem) for y, e in pairs])
+        tagged = []
+        for (_, entry), ok in zip(pairs, oks):
+            if ok and not entry.get("yc") and entry not in tagged:
+                entry["yc"] = True
+                tagged.append(entry)
         found = await asyncio.gather(*[probe(client, c, sem) for c in missing])
     finally:
         if owns:
@@ -156,6 +215,7 @@ async def run(companies_path="config/companies.yaml", *, dry_run=False, max_comp
     for c in tagged:
         print(f"yc: tag {c['ats']}:{c['slug']}")
     stats = {"yc_hiring": len(yc_companies), "already_watched": len(yc_companies) - len(missing),
+             "matched_not_proven": sum(1 for ok in oks if not ok),
              "newly_tagged": len(tagged), "probed": len(missing), "added": len(added),
              "no_board_found": len(missing) - sum(1 for f in found if f)}
     print("job-radar YC:", stats)
