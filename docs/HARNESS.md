@@ -91,3 +91,4 @@ When finished, open a pull request summarizing what changed and what is blocked.
 
 ## Progress log
 
+- 2026-11-18: Added `--check-links` and `.github/workflows/linkcheck.yml` (daily 11:30 UTC) at Taka's request: opens each open row's link and marks dead jobs Closed. Also fixed `write_top` crashing on number-typed cells, which had frozen the Top 30 tab since about Nov 8. Workday answers many job checks with 429 from Actions runners, so those rows stay unknown on a bad day and are retried the next.

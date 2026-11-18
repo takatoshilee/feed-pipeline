@@ -10,8 +10,6 @@ on:
         description: "Only print what would be closed"
         type: boolean
         default: false
-  push:
-    branches: [linkcheck]   # TEMP: dry run on the feature branch, removed before merge
 
 permissions:
   contents: read

@@ -16,6 +16,8 @@ Every 15 minutes:
 
 Once a day a sweep goes back over the whole open backlog, up to about 75 days old, and scores every role the 15-minute poll never looked at: postings that were already a few weeks old when I first saw them, the backlog of a board I just added, roles a since-fixed filter dropped. Roles on the curated lists are scored first, each role is scored once ever, the same job reached through a company board and an aggregator list counts once, and the run ends with a coverage line against the Simplify and Canadian lists so I can see what is still slipping through.
 
+A second daily job opens the link of every open row and marks the ones whose job is gone as Closed, so the sheet and the Top 30 only show roles I can still apply to. It asks the job site's own API where there is one (Workday, Greenhouse, Lever, Ashby, SmartRecruiters, Oracle, BambooHR) and otherwise looks for a "no longer available" message on the page. Anything it can't confirm, like a timeout or a rate limit, is left alone.
+
 The sheet is the actual point. One row per role, colour-coded by state, applied-date stamped when I tick the box. I stopped keeping a separate tracker.
 
 ## adapters
@@ -44,6 +46,7 @@ Worth knowing:
 - `--prime` marks everything currently open as seen without notifying. Run it once on a fresh checkout or the first real run will fire hundreds of pings.
 - `--preview` ranks the current backlog, read-only.
 - `--sweep` is the daily catch-up pass described above. It writes to the sheet, so run it with `--dry-run` off only in CI.
+- `--check-links` is that daily link check. With `--dry-run` it only prints what it would close.
 - `--company <slug>` and `--limit N` when you are poking at one board.
 
 Configuration is environment variables: `DISCORD_WEBHOOK_URL`, `GOOGLE_SHEET_ID` and `GOOGLE_CREDENTIALS_PATH`, and `LLM_PROVIDER` / `LLM_MODEL` / `LLM_API_KEY` for the scorer. Bedrock works too, set `AWS_REGION` for it.
