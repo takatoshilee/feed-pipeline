@@ -17,6 +17,10 @@ def test_candidates_cover_slug_name_and_domain():
 def test_proof_rules():
     assert yc.mentions_domain(PEBL, '{"url": "https://pebl.com/jobs/1"}')
     assert not yc.mentions_domain(PEBL, '{"content": "Join Pebl"}')
+    pulse = {"name": "Pulse", "website": "https://pulse.co"}
+    assert yc.mentions_domain(pulse, 'see https://www.pulse.co/about.')
+    assert yc.mentions_domain(pulse, '"publicWebsite":"https://pulse.co"')
+    assert not yc.mentions_domain(pulse, "https://pulse.com, impulse.co, pulse.co.uk, get.pulse.co")
     assert yc.distinctive("HackerRank") and yc.distinctive("Apollo.io")
     assert not yc.distinctive("Pulse") and not yc.distinctive("Atlas")
     assert yc.too_big({"team_size": 12}, 2815)
