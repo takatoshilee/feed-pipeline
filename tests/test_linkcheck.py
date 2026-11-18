@@ -215,3 +215,23 @@ def test_closed_updates_follow_rows_that_moved():
     assert linkcheck.closed_updates(results, header, [b, a]) == [{"range": "C3", "values": [["Closed"]]}]
     applied = dict(a, Status="Applied")
     assert linkcheck.closed_updates(results, header, [b, applied]) == []
+
+
+async def test_workday_checks_the_board_search():
+    wd = "https://t.wd3.myworkdayjobs.com"
+    seen = []
+
+    def handler(request):
+        if request.method == "POST":
+            import json
+            q = json.loads(request.content)["searchText"]
+            seen.append(q)
+            hits = [{"externalPath": "/job/Toronto/AI-Co-op_R-0000187401-2"}] if q == "R-0000187401" else []
+            return httpx.Response(200, json={"jobPostings": hits})
+        return httpx.Response(429)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        c = Checker(client, backoff=0)
+        live = await c.check(f"{wd}/en-US/Site/job/Toronto/AI-Co-op_R-0000187401-1")
+        gone = await c.check(f"{wd}/Site/job/Toronto/Old-Co-op_R999")
+    assert live.verdict == OPEN and gone.verdict == CLOSED
+    assert seen == ["R-0000187401", "R999"]

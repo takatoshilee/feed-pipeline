@@ -29,7 +29,8 @@ PER_SITE = 3                # at most this many requests in flight to one site (
 RETRIES = 2                 # extra tries after a 429 or 503, with backoff
 BACKOFF = 2.0               # seconds, doubled each retry
 # Sites that rate-limit hard: one request at a time, at least this many seconds apart.
-SLOW_SITES = {"myworkdayjobs.com": 1.0, "myworkdaysite.com": 1.0}
+SLOW_SITES: dict = {}
+CHECK_DEADLINE = 75.0       # seconds one link may take in total, retries included
 
 # Text that job sites show on a closed posting. Lower-case. Kept specific on purpose:
 # a footer like "can't find the job you are looking for?" must not match.
@@ -90,7 +91,7 @@ _LOCALE = re.compile(r"^[a-z]{2}-[A-Z]{2}$")
 
 
 def workday_api(url: str) -> str | None:
-    """The CXS detail endpoint for a Workday job page URL, or None if it isn't one.
+    """The CXS endpoint for a Workday job page URL, or None if it isn't one.
     https://t.wd3.myworkdayjobs.com/[en-US/]Site/job/Loc/Title_R1 ->
     https://t.wd3.myworkdayjobs.com/wday/cxs/t/Site/job/Loc/Title_R1
     https://wd5.myworkdaysite.com/recruiting/t/Site/job/... -> .../wday/cxs/t/Site/job/..."""
@@ -113,6 +114,20 @@ def workday_api(url: str) -> str | None:
         return None
     site, rest = parts[0], parts[1:]
     return f"https://{host}/wday/cxs/{tenant}/{site}/" + "/".join(rest)
+
+
+def workday_search(api: str) -> tuple[str, str, str] | None:
+    """(board search URL, requisition id, job path) for a CXS job URL. Workday answers
+    the per-job GET with 429 to GitHub's runners, but the board search (the POST the
+    radar polls with) works, so the check searches the board for the requisition id."""
+    m = re.match(r"^(https://[^/]+/wday/cxs/[^/]+/[^/]+)(/job/.+)$", api)
+    if not m:
+        return None
+    path = m.group(2)
+    req = path.rsplit("_", 1)[-1] if "_" in path else ""
+    if not req:
+        return None
+    return m.group(1) + "/jobs", req, path
 
 
 def greenhouse_ref(url: str, uid: str) -> tuple[str, str] | None:
@@ -235,6 +250,9 @@ class Checker:
         return None
 
     async def _workday(self, api) -> Result | None:
+        found = await self._workday_board(api)
+        if found is not None:
+            return found
         r = await self._get(api)
         if r.status_code in (404, 410):
             return Result(CLOSED, f"workday api {r.status_code}")
@@ -249,6 +267,28 @@ class Checker:
                 return Result(CLOSED, "workday canApply=false")
             return Result(OPEN, "workday api 200")
         return None
+
+    async def _workday_board(self, api) -> Result | None:
+        ref = workday_search(api)
+        if not ref:
+            return None
+        search, req, path = ref
+        # the "-1"/"-2" suffix marks per-location copies of one requisition
+        base = re.sub(r"-\d{1,2}$", "", req)
+        body = {"appliedFacets": {}, "limit": 20, "offset": 0, "searchText": base}
+        async with self._site_sem(search):
+            r = await self.client.post(search, json=body, timeout=TIMEOUT,
+                                       headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+        if r.status_code != 200:
+            return None
+        try:
+            posts = (r.json() or {}).get("jobPostings") or []
+        except ValueError:
+            return None
+        paths = [(j.get("externalPath") or "") for j in posts]
+        if any(p == path or p.rsplit("_", 1)[-1].startswith(base) for p in paths):
+            return Result(OPEN, "workday board")
+        return Result(CLOSED, "not on workday board")
 
     async def _ashby_ids(self, slug) -> set | None:
         key = slug.lower()
@@ -368,7 +408,12 @@ async def check_rows(rows, client, concurrency=CONCURRENCY) -> list[tuple[int, d
 
     async def one(i, r):
         async with sem:
-            return i, r, await checker.check(str(r.get("Link", "")), str(r.get("uid", "")))
+            try:
+                res = await asyncio.wait_for(
+                    checker.check(str(r.get("Link", "")), str(r.get("uid", ""))), CHECK_DEADLINE)
+            except asyncio.TimeoutError:
+                res = Result(UNKNOWN, "took too long")
+            return i, r, res
 
     return list(await asyncio.gather(*(one(i, r) for i, r in rows)))
 
