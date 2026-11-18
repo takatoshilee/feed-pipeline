@@ -553,6 +553,9 @@ async def check_links(config, *, dry_run=False, ws=None, client=None):
         by_host[(host, res.verdict)] += 1
     for (host, verdict), n in sorted(by_host.items(), key=lambda x: -x[1])[:40]:
         print(f"  {n:4d}  {verdict:7s}  {host}")
+    unsure = Counter((urlparse(str(r.get("Link", ""))).hostname or "?") for _, r, res in results
+                     if res.reason == "page 200" or res.verdict == linkcheck.UNKNOWN)
+    print("not confirmed by an API, by site:", dict(unsure.most_common(25)))
     reasons = Counter(res.reason for _, _, res in results)
     print("reasons:", dict(reasons.most_common(30)))
     for i, r, res in results:

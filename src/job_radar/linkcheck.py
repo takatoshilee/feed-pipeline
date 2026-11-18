@@ -25,6 +25,9 @@ BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.3
 TIMEOUT = 20.0
 MAX_BODY = 600_000          # characters of a page we look at
 CONCURRENCY = 12
+PER_SITE = 3                # at most this many requests in flight to one site (Workday 429s)
+RETRIES = 3                 # extra tries after a 429 or 503, with backoff
+BACKOFF = 2.0               # seconds, doubled each retry
 
 # Text that job sites show on a closed posting. Lower-case. Kept specific on purpose:
 # a footer like "can't find the job you are looking for?" must not match.
@@ -121,6 +124,10 @@ def greenhouse_ref(url: str, uid: str) -> tuple[str, str] | None:
         bits = uid.split(":")
         if len(bits) >= 3:
             return bits[1], bits[2]
+    # CareerPuck fronts Greenhouse boards: /job-board/<slug>/job/<id>?gh_jid=<id>
+    jid = (parse_qs(u.query).get("gh_jid") or [""])[0]
+    if host == "app.careerpuck.com" and len(parts) >= 2 and parts[0] == "job-board" and jid:
+        return parts[1], jid
     return None
 
 
@@ -180,14 +187,33 @@ def bamboo_api(url: str) -> str | None:
 class Checker:
     """Checks links with one shared httpx client. Ashby boards are fetched once per slug."""
 
-    def __init__(self, client):
+    def __init__(self, client, backoff=BACKOFF):
         self.client = client
+        self.backoff = backoff
         self._ashby: dict = {}
         self._ashby_lock = asyncio.Lock()
+        self._sites: dict = {}
+
+    def _site_sem(self, url) -> asyncio.Semaphore:
+        host = (urlparse(url).hostname or "").lower()
+        site = ".".join(host.split(".")[-2:])       # every *.myworkdayjobs.com shares one
+        if site not in self._sites:
+            self._sites[site] = asyncio.Semaphore(PER_SITE)
+        return self._sites[site]
 
     async def _get(self, url, *, accept="application/json"):
-        return await self.client.get(url, headers={"User-Agent": BROWSER_UA, "Accept": accept},
-                                     timeout=TIMEOUT, follow_redirects=True)
+        """GET with a per-site cap and a backoff on 429/503, which Workday sends freely."""
+        r = None
+        for attempt in range(RETRIES + 1):
+            async with self._site_sem(url):
+                r = await self.client.get(url, headers={"User-Agent": BROWSER_UA, "Accept": accept},
+                                          timeout=TIMEOUT, follow_redirects=True)
+            if r.status_code not in (429, 503) or attempt == RETRIES:
+                return r
+            ra = r.headers.get("Retry-After", "")
+            wait = float(ra) if ra.isdigit() else self.backoff * (2 ** attempt)
+            await asyncio.sleep(min(wait, 30.0))
+        return r
 
     async def _status_api(self, url, label) -> Result | None:
         """For APIs that answer 404 for a job that no longer exists."""

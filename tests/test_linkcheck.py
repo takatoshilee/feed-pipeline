@@ -92,6 +92,25 @@ async def test_checker_verdicts():
         assert via.verdict == CLOSED and "redirect" in via.reason
 
 
+async def test_checker_backs_off_on_429():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) < 3:
+            return httpx.Response(429)
+        return httpx.Response(404)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        res = await Checker(client, backoff=0).check("https://t.wd1.myworkdayjobs.com/S/job/A/B_R1")
+    assert res.verdict == CLOSED and len(calls) == 3
+
+
+def test_careerpuck_maps_to_greenhouse():
+    assert linkcheck.greenhouse_ref(
+        "https://app.careerpuck.com/job-board/lyft/job/8767710002?gh_jid=8767710002", "") \
+        == ("lyft", "8767710002")
+
+
 async def test_checker_network_error_is_unknown():
     def boom(request):
         raise httpx.ConnectTimeout("slow")
