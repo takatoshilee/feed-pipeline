@@ -1,0 +1,62 @@
+name: job-radar yc
+on:
+  schedule:
+    - cron: "0 9 * * 1"   # weekly, Monday 09:00 UTC (an hour after discover)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "print only, don't commit to the watch-list"
+        default: "false"
+
+permissions:
+  contents: read           # the watch-list lives in the private config repo (deploy key)
+
+concurrency:
+  group: radar-discover    # shares discover's group so the two never race on companies.yaml
+  cancel-in-progress: false
+
+jobs:
+  yc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch private config
+        uses: actions/checkout@v4
+        with:
+          repository: takatoshilee/job-radar-config
+          ssh-key: ${{ secrets.CONFIG_DEPLOY_KEY }}
+          path: .private-config
+      - name: Install private config
+        run: cp .private-config/companies.yaml config/companies.yaml
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+
+      - name: Find and tag YC company boards
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            python -m job_radar.yc --dry-run
+          else
+            python -m job_radar.yc
+          fi
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+
+      - name: Commit any changes (to the private config repo)
+        run: |
+          if ! git diff --quiet --no-index .private-config/companies.yaml config/companies.yaml; then
+            n=$(git diff --no-index .private-config/companies.yaml config/companies.yaml | grep -c '^+- slug:' || true)
+            cp config/companies.yaml .private-config/companies.yaml
+            cd .private-config
+            git config user.name "job-radar-bot"
+            git config user.email "actions@github.com"
+            git add companies.yaml
+            git commit -m "YC: add ${n} YC company board(s) and tag YC entries"
+            git push
+          else
+            echo "no YC changes this week"
+          fi

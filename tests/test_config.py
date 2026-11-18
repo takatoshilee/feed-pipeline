@@ -52,3 +52,11 @@ def test_load_settings_live_when_webhook_present(monkeypatch):
     s = load_settings()
     assert s.dry_run is False
     assert s.webhook_url == "http://hook"
+
+
+def test_load_companies_reads_yc_flag(tmp_path):
+    from job_radar.config import load_companies
+    f = tmp_path / "c.yaml"
+    f.write_text("companies:\n  - {slug: pebl, ats: ashby, yc: true}\n  - {slug: stripe, ats: greenhouse}\n")
+    a, b = load_companies(str(f))
+    assert a.yc is True and b.yc is False

@@ -23,6 +23,7 @@ class Company:
     tier: str = "target"          # "dream" | "target"
     wd_host: str | None = None    # workday only (M2)
     wd_site: str | None = None    # workday only (M2)
+    yc: bool = False              # a Y Combinator company (ranked up in the Top 30)
 
 
 class Urgency(str, Enum):

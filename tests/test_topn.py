@@ -152,3 +152,16 @@ def test_tracker_tab_skips_top_tab_wherever_it_sits():
     assert tracker_tab(Book([TOP_TAB, "Sheet1"])).title == "Sheet1"
     assert tracker_tab(Book(["Sheet1", TOP_TAB])).title == "Sheet1"
     assert tracker_tab(Book(["Jobs"])).title == "Jobs"
+
+
+def test_yc_companies_rank_up():
+    yc = frozenset({"pebl"})
+    plain = topn.score(row(uid="ashby:acme:1"), TODAY, yc)[0]
+    board = topn.score(row(uid="ashby:pebl:1", Company="pebl"), TODAY, yc)
+    assert board[0] == plain + topn.YC_BOOST and "YC" in board[1]
+    # a YC company reached through an aggregator feed is matched by its name
+    feed = topn.score(row(uid="simplify:simplify:9", Company="simplify", Role="Pebl: SWE Intern"),
+                      TODAY, yc)
+    assert "YC" in feed[1]
+    # no YC set (old callers) -> unchanged
+    assert topn.score(row(uid="ashby:pebl:1"), TODAY)[0] == plain

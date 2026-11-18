@@ -8,7 +8,8 @@ The rank starts from the LLM fit score and then applies Taka's own priorities
   3. low-level roles (compilers, kernels, embedded, hardware) rank low, he doesn't
      want that work, and research-titled roles rank lower too,
   4. Canada and remote first, then the US, then other countries (ranked low, not dropped),
-  5. recently posted roles get a small boost, but any open role can make the list.
+  5. recently posted roles get a small boost, but any open role can make the list,
+  6. Y Combinator companies get a boost (Nov 18 2026: "i wanna work yc company").
 Anything he flagged in the Priority column, or with a deadline inside two weeks, jumps up.
 """
 import re
@@ -53,11 +54,30 @@ def display(row) -> tuple[str, str]:
     return company, role
 
 
+YC_BOOST = 10
+
+
+def norm(name: str) -> str:
+    """'Hex Technologies' / 'hex-technologies' -> 'hextechnologies', for YC matching."""
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+
+
+def is_yc(row, yc) -> bool:
+    """True if the row's board (the slug in its uid) or its company name is a YC company.
+    `yc` is a set of norm()-ed slugs from the watch-list entries tagged yc: true."""
+    if not yc:
+        return False
+    parts = str(row.get("uid") or "").split(":")
+    if len(parts) >= 3 and norm(parts[1]) in yc:
+        return True
+    return norm(display(row)[0]) in yc
+
+
 def _has(text: str, words) -> bool:
     return any(w in text for w in words)
 
 
-def score(row, today: date) -> tuple[int, list[str]]:
+def score(row, today: date, yc=frozenset()) -> tuple[int, list[str]]:
     """Priority score (higher = apply sooner) and the short reasons behind it."""
     _, role = display(row)
     t = f" {role.lower()} "
@@ -98,6 +118,10 @@ def score(row, today: date) -> tuple[int, list[str]]:
         s -= 15
         why.append("outside Canada/US")
 
+    if is_yc(row, yc):
+        s += YC_BOOST
+        why.append("YC")
+
     rank = tracker.priority_rank(row)
     if rank == 0:
         s += 30
@@ -130,12 +154,12 @@ def eligible(row) -> bool:
     return tracker.status(row) == tracker.PENDING and not tracker.wrong_term(row)
 
 
-def top(rows, today: date, n: int = TOP_N) -> list[tuple[int, list[str], dict]]:
+def top(rows, today: date, n: int = TOP_N, yc=frozenset()) -> list[tuple[int, list[str], dict]]:
     """The n best open roles, highest priority first. One entry per (company, role) so
     the same job posted in three cities takes one slot, not three."""
     ranked = []
     seen = set()
-    scored = sorted(((score(r, today), r) for r in rows if eligible(r)),
+    scored = sorted(((score(r, today, yc), r) for r in rows if eligible(r)),
                     key=lambda x: x[0][0], reverse=True)
     for (s, why), r in scored:
         key = tuple(x.lower() for x in display(r))
