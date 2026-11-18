@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlparse
 
-from .adapters.base import strip_html
+from .adapters.base import USER_AGENT, strip_html
 
 OPEN, CLOSED, UNKNOWN = "open", "closed", "unknown"
 BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -26,7 +26,7 @@ TIMEOUT = 20.0
 MAX_BODY = 600_000          # characters of a page we look at
 CONCURRENCY = 12
 PER_SITE = 3                # at most this many requests in flight to one site (Workday 429s)
-RETRIES = 3                 # extra tries after a 429 or 503, with backoff
+RETRIES = 2                 # extra tries after a 429 or 503, with backoff
 BACKOFF = 2.0               # seconds, doubled each retry
 
 # Text that job sites show on a closed posting. Lower-case. Kept specific on purpose:
@@ -201,12 +201,14 @@ class Checker:
             self._sites[site] = asyncio.Semaphore(PER_SITE)
         return self._sites[site]
 
-    async def _get(self, url, *, accept="application/json"):
-        """GET with a per-site cap and a backoff on 429/503, which Workday sends freely."""
+    async def _get(self, url, *, accept="application/json", ua=USER_AGENT):
+        """GET with a per-site cap and a backoff on 429/503. APIs get the radar's own
+        User-Agent (the one its board polls already use without trouble); a browser
+        User-Agent with no cookies makes Workday answer 429."""
         r = None
         for attempt in range(RETRIES + 1):
             async with self._site_sem(url):
-                r = await self.client.get(url, headers={"User-Agent": BROWSER_UA, "Accept": accept},
+                r = await self.client.get(url, headers={"User-Agent": ua, "Accept": accept},
                                           timeout=TIMEOUT, follow_redirects=True)
             if r.status_code not in (429, 503) or attempt == RETRIES:
                 return r
@@ -310,7 +312,10 @@ class Checker:
             res = await self._api(url, uid)
             if res:
                 return res
-            r = await self._get(url, accept="text/html,application/xhtml+xml")
+            html_accept = "text/html,application/xhtml+xml"
+            r = await self._get(url, accept=html_accept, ua=BROWSER_UA)
+            if r.status_code in (403, 429):        # some sites block one UA, not the other
+                r = await self._get(url, accept=html_accept)
             final = str(r.url)
             # A short link (go.vansh.nyc, etc.) or a redirect that lands on a known ATS:
             # ask that ATS about the real job page.
