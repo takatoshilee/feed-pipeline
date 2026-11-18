@@ -77,7 +77,16 @@ PAGES = {   # the hosted board page, which names the company's own website
 
 def mentions_domain(company: dict, text: str) -> bool:
     dom = _domain(company.get("website", ""))
-    return bool(dom) and dom in text.lower()
+    if not dom:
+        return False
+    # whole domain only: 'pulse.co' must not match 'pulse.com' or 'impulse.co'
+    t = text.lower()
+    pat = r"(?<![a-z0-9-])" + re.escape(dom) + r"(?![a-z0-9-]|\.[a-z])"
+    for m in re.finditer(pat, t):
+        i = m.start()
+        if i == 0 or t[i - 1] != "." or t[:i].endswith("www."):
+            return True          # 'x.pulse.co' is another site; 'www.pulse.co' is theirs
+    return False
 
 
 def distinctive(name: str) -> bool:
