@@ -556,6 +556,9 @@ async def check_links(config, *, dry_run=False, ws=None, client=None):
     unsure = Counter((urlparse(str(r.get("Link", ""))).hostname or "?") for _, r, res in results
                      if res.reason == "page 200" or res.verdict == linkcheck.UNKNOWN)
     print("not confirmed by an API, by site:", dict(unsure.most_common(25)))
+    blocked = Counter(".".join((urlparse(str(r.get("Link", ""))).hostname or "?").split(".")[-2:])
+                      for _, r, res in results if res.reason in ("page 429", "page 403"))
+    print("rate-limited or blocked, by site:", dict(blocked.most_common(15)))
     reasons = Counter(res.reason for _, _, res in results)
     print("reasons:", dict(reasons.most_common(30)))
     for i, r, res in results:
