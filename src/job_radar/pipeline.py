@@ -25,6 +25,12 @@ SHEET_MIN_FIT = 60  # the cron only mirrors genuinely-good matches to the Sheet 
 BACKFILL_CAP = int(os.environ.get("BACKFILL_CAP", "300"))
 
 
+def _yc(companies):
+    """norm()-ed slugs of the watch-list boards tagged yc: true (for the Top 30 boost)."""
+    from .topn import norm
+    return frozenset(norm(c.slug) for c in companies if c.yc)
+
+
 def _company_map(companies):
     return {(c.ats, c.slug): c for c in companies}
 
@@ -283,7 +289,7 @@ async def sweep(config, *, provider=None, sheet_sink=None, cache=None, now=None,
     cache.save(now=now)
     try:
         await asyncio.to_thread(sheet_mod.write_top, sheet_sink.ws, None,
-                                os.environ.get("PREPARE_URL") or None)
+                                os.environ.get("PREPARE_URL") or None, _yc(companies))
     except Exception as e:
         errors.append(("sheet", f"write_top: {e!r}"))
 
@@ -339,7 +345,7 @@ async def rescore(config, *, provider=None, sheet_sink=None, now=None):
         await asyncio.to_thread(ws.batch_update, updates, value_input_option="USER_ENTERED")
     try:
         await asyncio.to_thread(sheet_mod.write_top, ws, None,
-                                os.environ.get("PREPARE_URL") or None)
+                                os.environ.get("PREPARE_URL") or None, _yc(companies))
     except Exception as e:
         errors.append(("sheet", f"write_top: {e!r}"))
     stats = {"open_rows": len(open_uids), "found_open": sum(1 for u in open_uids if u in by_uid),
@@ -476,7 +482,7 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
         # current. Only that tab is rewritten; the main tracker rows are read, not changed.
         try:
             await asyncio.to_thread(sheet.write_top, sheet_sink.ws, None,
-                                    os.environ.get("PREPARE_URL") or None)
+                                    os.environ.get("PREPARE_URL") or None, _yc(companies))
         except Exception as e:
             errors.append(("sheet", f"write_top: {e!r}"))
     try:

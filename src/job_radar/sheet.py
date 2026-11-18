@@ -305,7 +305,7 @@ class SheetSink:
 
 
 
-def write_top(ws, today=None, prepare_url: str | None = None) -> int:
+def write_top(ws, today=None, prepare_url: str | None = None, yc=frozenset()) -> int:
     """Rebuild the 'Top 30' tab from the tracker rows (topn.top), creating the tab on
     first use. Read-only on the main tracker: only the Top tab is cleared and rewritten,
     so nothing Taka typed in Sheet1 is touched. Returns the number of roles listed."""
@@ -313,7 +313,7 @@ def write_top(ws, today=None, prepare_url: str | None = None) -> int:
     if ws.title == TOP_TAB:
         return 0                 # never rank the ranking tab itself
     today = today or date.today()
-    ranked = topn.top(all_records(ws), today)
+    ranked = topn.top(all_records(ws), today, yc=yc)
     values = topn.table(ranked, prepare_url)
     book = ws.spreadsheet
     try:

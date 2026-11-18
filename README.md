@@ -12,9 +12,11 @@ Every 15 minutes:
 2. drops anything already seen, closed, or duplicated across sources
 3. has an LLM read each new posting, score the fit against my profile, and extract the term dates, since a Summer 2026 role is useless to me and gets gated out
 4. writes what survives to a Google Sheet and pings Discord for the high scorers
-5. rebuilds a "Top 30" tab in the same sheet: the open roles most worth applying to next, ranked by fit plus my own priorities (ML and LLM roles first, 12 to 16 month co-ops up, low-level and research roles down)
+5. rebuilds a "Top 30" tab in the same sheet: the open roles most worth applying to next, ranked by fit plus my own priorities (ML and LLM roles first, 12 to 16 month co-ops up, low-level and research roles down, Y Combinator startups up)
 
 Once a day a sweep goes back over the whole open backlog, up to about 75 days old, and scores every role the 15-minute poll never looked at: postings that were already a few weeks old when I first saw them, the backlog of a board I just added, roles a since-fixed filter dropped. Roles on the curated lists are scored first, each role is scored once ever, the same job reached through a company board and an aggregator list counts once, and the run ends with a coverage line against the Simplify and Canadian lists so I can see what is still slipping through.
+
+Once a week a YC job looks up every Y Combinator company that is hiring, finds its board on Ashby, Greenhouse or Lever, and adds it to the watch-list tagged as YC. YC's own job pages rate-limit after a few dozen loads, so polling them directly every 15 minutes was not an option; startups that only post on Work at a Startup I check by hand.
 
 The sheet is the actual point. One row per role, colour-coded by state, applied-date stamped when I tick the box. I stopped keeping a separate tracker.
 
