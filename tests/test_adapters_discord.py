@@ -40,6 +40,11 @@ def test_parse_nordique_post():
     assert p.posted_at is not None and p.posted_at.year == 2026
 
 
+def test_followed_channel_post_counts():
+    followed = dict(NORDIQUE, author={"username": "northern.dev #intern-swe"}, webhook_id="9")
+    assert len(discord.parse([followed])) == 1
+
+
 def test_falls_back_to_embed_url_and_skips_linkless():
     msg = dict(NORDIQUE, components=[])
     assert discord.parse([msg])[0].url == "https://abb.example/role"

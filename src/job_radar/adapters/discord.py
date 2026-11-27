@@ -1,8 +1,8 @@
 """Job posts that a third-party Discord bot (for example Nordique from the northern.dev
 server) drops into channels of my own server.
 
-The bot is added to my server with its own "Add App" button, so nothing here reads a
-user account. My job-radar bot reads the channels through the REST API with its bot
+Posts reach my server either from the bot itself or through "Follow" on an announcement
+channel (those arrive as webhook messages), so nothing here reads a user account. My job-radar bot reads the channels through the REST API with its bot
 token (DISCORD_BOT_TOKEN, needs the Message Content intent turned on) and the channel
 ids in DISCORD_JOB_CHANNELS (comma separated).
 
@@ -91,8 +91,8 @@ def parse_message(msg: dict) -> list[Posting]:
 def parse(messages) -> list[Posting]:
     out = []
     for m in messages or []:
-        if not (m.get("author") or {}).get("bot"):
-            continue                                 # only bot job posts, never people's chat
+        if not ((m.get("author") or {}).get("bot") or m.get("webhook_id")):
+            continue                                 # bot or followed-channel posts only, never people's chat
         out.extend(parse_message(m))
     return out
 
