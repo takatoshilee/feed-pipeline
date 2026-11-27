@@ -1,5 +1,5 @@
 """Y Combinator startups: find the job boards of YC companies that are hiring, add them to
-the watch-list, and tag them `yc: true` so the Top 30 ranks their roles up.
+the watch-list, and tag them `yc: true` so the Worth applying list ranks their roles up.
 
 Company list: the yc-oss mirror of YC's public company directory (hiring.json, rebuilt
 daily from ycombinator.com/companies). For each company we guess board slugs from its YC

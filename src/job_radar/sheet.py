@@ -15,7 +15,8 @@ HEADERS = ["uid", "Company", "Role", "Applied", "Fit", "Resume", "Term", "Why", 
            "Added on", "Lane", "Flags"]
 
 
-TOP_TAB = "Top 30"   # generated ranking tab (write_top); never the tracker
+TOP_TAB = "Worth applying"   # generated ranking tab (write_top); never the tracker
+OLD_TOP_TABS = ("Top 30",)    # earlier name of that tab, also never the tracker
 OTHER_PREFIX = "Co-op"  # tabs kept by Taka's co-op portal tracker (resume repo); the bot never writes there
 
 
@@ -37,10 +38,11 @@ def connect(creds_path: str, sheet_id: str):
 
 
 def tracker_tab(book):
-    """The tracker worksheet: the first tab that is not the generated Top 30 tab. Picking
+    """The tracker worksheet: the first tab that is not the generated ranking tab. Picking
     `.sheet1` blindly is unsafe because tab order is whatever Taka drags it to."""
     for ws in book.worksheets():
-        if ws.title != TOP_TAB and not ws.title.startswith(OTHER_PREFIX):
+        if (ws.title != TOP_TAB and ws.title not in OLD_TOP_TABS
+                and not ws.title.startswith(OTHER_PREFIX)):
             return ws
     return book.sheet1
 
@@ -307,11 +309,11 @@ class SheetSink:
 
 
 def write_top(ws, today=None, prepare_url: str | None = None, yc=frozenset()) -> int:
-    """Rebuild the 'Top 30' tab from the tracker rows (topn.top), creating the tab on
-    first use. Read-only on the main tracker: only the Top tab is cleared and rewritten,
+    """Rebuild the 'Worth applying' tab from the tracker rows (topn.top, no cap), creating
+    the tab on first use. Read-only on the main tracker: only the Top tab is cleared and rewritten,
     so nothing Taka typed in Sheet1 is touched. Returns the number of roles listed."""
     from . import topn
-    if ws.title == TOP_TAB:
+    if ws.title == TOP_TAB or ws.title in OLD_TOP_TABS:
         return 0                 # never rank the ranking tab itself
     today = today or date.today()
     ranked = topn.top(all_records(ws), today, yc=yc)
@@ -320,9 +322,13 @@ def write_top(ws, today=None, prepare_url: str | None = None, yc=frozenset()) ->
     try:
         tab = book.worksheet(TOP_TAB)
     except Exception:
-        tab = book.add_worksheet(title=TOP_TAB, rows=topn.TOP_N + 5,
+        tab = book.add_worksheet(title=TOP_TAB, rows=len(values) + 5,
                                  cols=len(topn.TOP_HEADERS))   # appended after the tracker
     tab.clear()
+    # The list has no fixed length, so grow (or shrink) the grid to fit before writing.
+    resize = getattr(tab, "resize", None)
+    if resize is not None:
+        resize(rows=len(values) + 5, cols=len(topn.TOP_HEADERS))
     tab.update(range_name="A1", values=values, value_input_option="USER_ENTERED")
     return len(ranked)
 

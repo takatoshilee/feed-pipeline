@@ -63,25 +63,52 @@ def test_top_dedupes_same_role_and_unpacks_feed_names():
     assert [topn.display(r) for _, _, r in ranked] == [("lyft", "ML Intern"), ("Pebl", "SWE Intern")]
 
 
-def test_top_caps_at_n():
+def test_top_lists_every_worthwhile_role_with_no_cap():
     rows = [row(uid=str(i), Role=f"Intern {i}") for i in range(50)]
-    assert len(topn.top(rows, TODAY)) == topn.TOP_N
+    assert len(topn.top(rows, TODAY)) == 50
+    assert len(topn.top(rows, TODAY, n=5)) == 5
+
+
+def test_worth_applying_drops_what_he_cannot_or_will_not_do():
+    assert topn.worth_applying(row())
+    assert topn.worth_applying(row(Role="Product Manager Intern"))
+    assert topn.worth_applying(row(Role="Data Analyst", Term="Summer 2027 co-op"))
+    assert topn.why_not(row(Applied="TRUE")) == "not open"
+    assert topn.why_not(row(Status="Closed")) == "not open"
+    assert topn.why_not(row(Term="Fall 2026")) == "term already started"
+    assert topn.why_not(row(Flags="low-level")) == "low-level"
+    assert topn.why_not(row(Flags="senior")) == "senior"
+    assert topn.why_not(row(Flags="grad degree")) == "grad degree"
+    assert topn.why_not(row(Flags="not a student role")) == "not a student role"
+    assert topn.why_not(row(Role="Senior Software Engineer")) == "senior or grad-level title"
+    assert topn.why_not(row(Role="PhD Research Intern")) == "senior or grad-level title"
+    assert topn.why_not(row(Role="Software Engineer, New Grad")) == "senior or grad-level title"
+    assert topn.why_not(row(Role="Compiler Engineer Intern")) == "low-level"
+    assert topn.why_not(row(Role="Data Scientist")) == "not an internship or co-op"
+    assert topn.why_not(row(Fit="55")) == "fit under 60"
+    # roles from the aggregator feeds are judged on the real title
+    assert topn.worth_applying(row(Company="simplify", Role="Pebl: ML Intern"))
 
 
 def test_table_links():
     ranked = topn.top([row(Company="lyft", Role='ML "Intern"')], TODAY)
     plain = topn.table(ranked)
     assert plain[0] == topn.TOP_HEADERS
-    assert plain[1][9] == 'prep lyft: ML "Intern"'
-    assert plain[1][8] == '=HYPERLINK("https://a.b/1", "Apply")'
+    assert plain[1][2] == 80
+    assert plain[1][11] == 'prep lyft: ML "Intern"'
+    assert plain[1][10] == '=HYPERLINK("https://a.b/1", "Apply")'
     linked = topn.table(ranked, "https://example.com/t")
-    assert linked[1][9] == '=HYPERLINK("https://example.com/t", "prep lyft: ML ""Intern""")'
+    assert linked[1][11] == '=HYPERLINK("https://example.com/t", "prep lyft: ML ""Intern""")'
 
 
 class FakeTab:
     def __init__(self):
         self.values = None
         self.cleared = False
+        self.rows = None
+
+    def resize(self, rows, cols):
+        self.rows = rows
 
     def clear(self):
         self.cleared = True
@@ -123,7 +150,7 @@ def test_write_top_creates_tab_and_leaves_tracker_alone():
     book = FakeBook(has_tab=False)
     n = write_top(FakeWS(records, book), TODAY)
     assert n == 1 and book.added and book.tab.cleared
-    assert book.tab.values[1][2:4] == ["lyft", "ML Intern"]
+    assert book.tab.values[1][3:5] == ["lyft", "ML Intern"]
     assert records == snapshot
 
 
@@ -131,6 +158,11 @@ def test_write_top_reuses_existing_tab():
     book = FakeBook(has_tab=True)
     write_top(FakeWS([row()], book), TODAY)
     assert not book.added and len(book.tab.values) == 2
+    assert book.tab.rows == 2 + 5          # grid sized to the list, not a fixed 30
+
+
+def test_old_top_30_tab_is_never_the_tracker():
+    assert tracker_tab(Book(["Top 30", "Sheet1"])).title == "Sheet1"
 
 
 def test_write_top_refuses_to_rank_itself():
@@ -165,3 +197,10 @@ def test_yc_companies_rank_up():
     assert "YC" in feed[1]
     # no YC set (old callers) -> unchanged
     assert topn.score(row(uid="ashby:pebl:1"), TODAY)[0] == plain
+
+
+def test_data_science_and_big_names_rank_up():
+    assert s(Role="Data Scientist Intern") > s(Role="Machine Learning Engineer Intern")
+    assert s(Company="google", Role="Data Scientist Intern") > s(Role="Data Scientist Intern")
+    assert s(Company="simplify", Role="Google: SWE Intern") > s()
+    assert s(Company="googleplex-clone") == s()
