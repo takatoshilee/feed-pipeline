@@ -12,7 +12,7 @@ Every 15 minutes:
 2. drops anything already seen, closed, or duplicated across sources
 3. has an LLM read each new posting, score the fit against my profile, and extract the term dates, since a Summer 2026 role is useless to me and gets gated out
 4. writes what survives to a Google Sheet and pings Discord for the high scorers
-5. rebuilds a "Top 30" tab in the same sheet: the open roles most worth applying to next, ranked by fit plus my own priorities (ML and LLM roles first, 12 to 16 month co-ops up, low-level and research roles down, Y Combinator startups up)
+5. rebuilds a "Worth applying" tab in the same sheet: every open internship or co-op I could actually take and would want (no senior, grad-degree, low-level or already-started roles, fit 60 or more), with no cap, ranked by fit plus my own priorities (data science and ML first, well-known names and Y Combinator startups up, 12 to 16 month co-ops up, research down, Canada and remote first)
 
 Once a day a sweep goes back over the whole open backlog, up to about 75 days old, and scores every role the 15-minute poll never looked at: postings that were already a few weeks old when I first saw them, the backlog of a board I just added, roles a since-fixed filter dropped. Roles on the curated lists are scored first, each role is scored once ever, the same job reached through a company board and an aggregator list counts once, and the run ends with a coverage line against the Simplify and Canadian lists so I can see what is still slipping through.
 

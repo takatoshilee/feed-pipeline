@@ -1,4 +1,8 @@
-"""The daily "Top 30" list: which open roles are most worth applying to right now.
+"""The "Worth applying" list: every open role worth applying to, best first.
+
+Nov 27 2026: this replaced the fixed "Top 30" (Taka: "the top 30 is stupid, just list all
+ones worth applying for my position"). There is no cap any more. A role is listed when it
+passes worth_applying() below, and the order comes from score().
 
 Pure logic over tracker rows (same dicts as tracker.py), so it is fully unit-testable.
 The rank starts from the LLM fit score and then applies Taka's own priorities
@@ -9,7 +13,9 @@ The rank starts from the LLM fit score and then applies Taka's own priorities
      want that work, and research-titled roles rank lower too,
   4. Canada and remote first, then the US, then other countries (ranked low, not dropped),
   5. recently posted roles get a small boost, but any open role can make the list,
-  6. Y Combinator companies get a boost (Nov 18 2026: "i wanna work yc company").
+  6. Y Combinator companies get a boost (Nov 18 2026: "i wanna work yc company"),
+  7. data science roles and well-known tech names get a boost (Nov 27 2026: "data
+     scientist Google or smth").
 Anything he flagged in the Priority column, or with a deadline inside two weeks, jumps up.
 """
 import re
@@ -17,7 +23,8 @@ from datetime import date
 
 from . import tracker
 
-TOP_N = 30
+TOP_N = None   # no cap (was 30 until Nov 27 2026)
+MIN_FIT = 60   # same bar the Sheet uses for "genuinely good match" (pipeline.SHEET_MIN_FIT)
 
 # Keyword sets matched against the role title (lower-cased, padded with spaces so
 # short tokens like " ml " only match whole words).
@@ -56,7 +63,6 @@ def display(row) -> tuple[str, str]:
 
 YC_BOOST = 10
 
-
 def norm(name: str) -> str:
     """'Hex Technologies' / 'hex-technologies' -> 'hextechnologies', for YC matching."""
     return re.sub(r"[^a-z0-9]", "", (name or "").lower())
@@ -71,6 +77,30 @@ def is_yc(row, yc) -> bool:
     if len(parts) >= 3 and norm(parts[1]) in yc:
         return True
     return norm(display(row)[0]) in yc
+
+
+# Nov 27 2026: "I want to get like data scientist Google or smth". Data science roles get
+# an extra push on top of the target-lane boost, and well-known tech names rank up.
+DS_BOOST = 6
+BIG_NAME_BOOST = 6
+_DS = ("data scien", "data analy", "analytics", "decision scien", "quantitative analyst",
+       "business intelligence", "product analyst", "insights")
+_BIG_NAMES = frozenset(norm(n) for n in (
+    "google", "alphabet", "deepmind", "youtube", "waymo", "meta", "facebook", "apple",
+    "amazon", "aws", "microsoft", "linkedin", "netflix", "nvidia", "openai", "anthropic",
+    "cohere", "shopify", "stripe", "airbnb", "uber", "lyft", "spotify", "databricks",
+    "snowflake", "salesforce", "adobe", "pinterest", "snap", "doordash", "instacart",
+    "wealthsimple", "rbc", "borealis", "td", "scotiabank", "bmo", "cibc", "ibm", "intuit",
+    "tiktok", "bytedance", "coinbase", "robinhood", "palantir", "figma", "notion",
+    "tesla", "bloomberg", "citadel", "two sigma", "jane street"))
+
+
+def is_big_name(row) -> bool:
+    company = norm(display(row)[0])
+    if company in _BIG_NAMES:
+        return True
+    parts = str(row.get("uid") or "").split(":")
+    return len(parts) >= 3 and norm(parts[1]) in _BIG_NAMES
 
 
 def _has(text: str, words) -> bool:
@@ -96,6 +126,14 @@ def score(row, today: date, yc=frozenset()) -> tuple[int, list[str]]:
                                                  or (row.get("Resume") or "").strip().upper() == "AI")):
         s += 10
         why.append(lane if lane else "target lane")
+
+    if not low_level and (lane == "data" or _has(t, _DS)):
+        s += DS_BOOST
+        why.append("data science")
+
+    if is_big_name(row):
+        s += BIG_NAME_BOOST
+        why.append("big name")
 
     if _has(t, _RESEARCH) and "data scien" not in t:
         s -= 15
@@ -154,12 +192,52 @@ def eligible(row) -> bool:
     return tracker.status(row) == tracker.PENDING and not tracker.wrong_term(row)
 
 
-def top(rows, today: date, n: int = TOP_N, yc=frozenset()) -> list[tuple[int, list[str], dict]]:
-    """The n best open roles, highest priority first. One entry per (company, role) so
-    the same job posted in three cities takes one slot, not three."""
+# Hard no's for the Worth applying list, from his profile (Nov 27 2026): he is a
+# 3rd-year undergrad (grad Dec 2028) after a Summer 2027 internship or a 12/16 month
+# co-op, and does not want low-level work. Judged from the scorer's Flags first, then
+# the title as a fallback for rows scored before Flags existed.
+_DROP_FLAGS = ("low-level", "senior", "grad degree", "citizenship", "past term",
+               "not a student role")
+_STUDENT = re.compile(r"\b(intern|interns|internship|co-?op|student|placement|apprentice"
+                      r"|work term|pey|summer analyst|summer associate)\b")
+_SENIOR = re.compile(r"\b(senior|sr\.?|staff|principal|director|new grads?|new graduates?"
+                     r"|phd|ph\.d|doctoral|postdoc|mba|master'?s)\b")
+
+
+def why_not(row) -> str:
+    """'' if the role is worth applying to, else the first reason it is not."""
+    if tracker.status(row) != tracker.PENDING:
+        return "not open"
+    if tracker.wrong_term(row):
+        return "term already started"
+    flags = (row.get("Flags") or "").lower()
+    for f in _DROP_FLAGS:
+        if f in flags:
+            return f
+    _, role = display(row)
+    t = f" {role.lower()} "
+    if _SENIOR.search(t):
+        return "senior or grad-level title"
+    if _has(t, _LOW_LEVEL):
+        return "low-level"
+    if not _STUDENT.search(t) and not _STUDENT.search((row.get("Term") or "").lower()):
+        return "not an internship or co-op"
+    if tracker.fit(row) < MIN_FIT:
+        return f"fit under {MIN_FIT}"
+    return ""
+
+
+def worth_applying(row) -> bool:
+    return why_not(row) == ""
+
+
+def top(rows, today: date, n: int | None = TOP_N, yc=frozenset()) -> list[tuple[int, list[str], dict]]:
+    """Every role worth applying to (or the n best when n is given), highest priority
+    first. One entry per (company, role) so the same job posted in three cities takes one
+    slot, not three."""
     ranked = []
     seen = set()
-    scored = sorted(((score(r, today, yc), r) for r in rows if eligible(r)),
+    scored = sorted(((score(r, today, yc), r) for r in rows if worth_applying(r)),
                     key=lambda x: x[0][0], reverse=True)
     for (s, why), r in scored:
         key = tuple(x.lower() for x in display(r))
@@ -167,13 +245,14 @@ def top(rows, today: date, n: int = TOP_N, yc=frozenset()) -> list[tuple[int, li
             continue
         seen.add(key)
         ranked.append((s, why, r))
-        if len(ranked) >= n:
+        if n is not None and len(ranked) >= n:
             break
     return ranked
 
 
-TOP_HEADERS = ["Rank", "Priority score", "Company", "Role", "Term", "Location", "Deadline",
-               "Resume", "Apply link", "Prepare", "Why it ranks here", "Fit reason"]
+TOP_HEADERS = ["Rank", "Priority score", "Fit", "Company", "Role", "Term", "Location",
+               "Deadline", "Posted", "Resume", "Apply link", "Prepare", "Why it ranks here",
+               "Fit reason"]
 
 
 def _quote(s: str) -> str:
@@ -181,7 +260,7 @@ def _quote(s: str) -> str:
 
 
 def table(ranked, prepare_url: str | None = None) -> list[list]:
-    """Rows for the Top tab. 'Prepare' is a link to wherever Taka asks Claude to prep the
+    """Rows for the Worth applying tab. 'Prepare' is a link to wherever Taka asks Claude to prep the
     application (PREPARE_URL), with the exact words to paste; plain text if unset."""
     out = [TOP_HEADERS]
     for i, (s, why, r) in enumerate(ranked, start=1):
@@ -190,7 +269,7 @@ def table(ranked, prepare_url: str | None = None) -> list[list]:
         prep = (f'=HYPERLINK("{_quote(prepare_url)}", "{_quote(ask)}")' if prepare_url else ask)
         link = r.get("Link") or ""
         apply = f'=HYPERLINK("{_quote(link)}", "Apply")' if link else ""
-        out.append([i, s, company, role, r.get("Term", ""), r.get("Location", ""),
-                    r.get("Deadline", ""), r.get("Resume", ""), apply, prep,
-                    ", ".join(why), r.get("Why", "")])
+        out.append([i, s, tracker.fit(r), company, role, r.get("Term", ""),
+                    r.get("Location", ""), r.get("Deadline", ""), r.get("Posted", ""),
+                    r.get("Resume", ""), apply, prep, ", ".join(why), r.get("Why", "")])
     return out

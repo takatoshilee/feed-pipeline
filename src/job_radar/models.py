@@ -23,7 +23,7 @@ class Company:
     tier: str = "target"          # "dream" | "target"
     wd_host: str | None = None    # workday only (M2)
     wd_site: str | None = None    # workday only (M2)
-    yc: bool = False              # a Y Combinator company (ranked up in the Top 30)
+    yc: bool = False              # a Y Combinator company (ranked up in the Worth applying list)
 
 
 class Urgency(str, Enum):
@@ -58,5 +58,5 @@ class Profile:
     high_fresh_hours: int = 2
     # "filter": a location outside locations_allow (or in locations_block) is dropped.
     # "rank": any location passes, but outside locations_allow only student-titled roles
-    # (intern, co-op...) are scored, and the Top 30 ranks them lower instead of dropping them.
+    # (intern, co-op...) are scored, and the Worth applying list ranks them lower instead of dropping them.
     locations_mode: str = "filter"

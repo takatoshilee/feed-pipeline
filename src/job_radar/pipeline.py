@@ -26,7 +26,7 @@ BACKFILL_CAP = int(os.environ.get("BACKFILL_CAP", "300"))
 
 
 def _yc(companies):
-    """norm()-ed slugs of the watch-list boards tagged yc: true (for the Top 30 boost)."""
+    """norm()-ed slugs of the watch-list boards tagged yc: true (for the Worth applying boost)."""
     from .topn import norm
     return frozenset(norm(c.slug) for c in companies if c.yc)
 
@@ -478,7 +478,7 @@ async def run(config, *, provider=None, notifier=None, sheet_sink=None, now=None
             await asyncio.to_thread(sheet.stamp_applied, sheet_sink.ws)
         except Exception as e:
             errors.append(("sheet", f"stamp_applied: {e!r}"))
-        # Rebuild the ranked 'Top 30' tab so the list of what to apply to next is always
+        # Rebuild the ranked 'Worth applying' tab so the list of what to apply to next is always
         # current. Only that tab is rewritten; the main tracker rows are read, not changed.
         try:
             await asyncio.to_thread(sheet.write_top, sheet_sink.ws, None,
