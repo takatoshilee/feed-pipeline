@@ -316,7 +316,10 @@ def write_top(ws, today=None, prepare_url: str | None = None, yc=frozenset()) ->
     if ws.title == TOP_TAB or ws.title in OLD_TOP_TABS:
         return 0                 # never rank the ranking tab itself
     today = today or date.today()
-    ranked = topn.top(all_records(ws), today, yc=yc)
+    # get_all_records turns numeric-looking cells (Fit, a Company like "3M", a zip in
+    # Location) into ints; the ranking code treats every cell as text.
+    records = [{k: "" if v is None else str(v) for k, v in r.items()} for r in all_records(ws)]
+    ranked = topn.top(records, today, yc=yc)
     values = topn.table(ranked, prepare_url)
     book = ws.spreadsheet
     try:

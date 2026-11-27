@@ -204,3 +204,9 @@ def test_data_science_and_big_names_rank_up():
     assert s(Company="google", Role="Data Scientist Intern") > s(Role="Data Scientist Intern")
     assert s(Company="simplify", Role="Google: SWE Intern") > s()
     assert s(Company="googleplex-clone") == s()
+
+
+def test_write_top_copes_with_numeric_cells():
+    book = FakeBook(has_tab=True)
+    n = write_top(FakeWS([row(Fit=80, Company=3, Location=12345, Deadline=20261201)], book), TODAY)
+    assert n == 1 and book.tab.values[1][3] == "3"
