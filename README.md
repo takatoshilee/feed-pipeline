@@ -22,7 +22,7 @@ The sheet is the actual point. One row per role, colour-coded by state, applied-
 
 ## adapters
 
-Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Oracle, Google Careers, Amazon Jobs, the Simplify community feeds, and a hand-curated Canadian internship list on GitHub.
+Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Oracle, Google Careers, Amazon Jobs, the Simplify community feeds, a hand-curated Canadian internship list on GitHub, and job bots I add to my own Discord server (read with my bot's token from the channels in `DISCORD_JOB_CHANNELS`).
 
 Each one is a small module under `src/job_radar/adapters/` that turns a board into `Posting` objects, so adding another is usually an afternoon of reading someone's JSON. A few companies expose nothing usable (Microsoft's careers site is browser-locked), and those I still check by hand.
 

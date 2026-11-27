@@ -63,6 +63,7 @@ python -m job_radar --dry-run --company <slug>
 - [ ] 4. Give connects a shorter timeout than reads in `adapters/base.py` (an `httpx.Timeout` with a connect value around 8 seconds), so an unreachable host costs less of the run. Done when tests pass and a full dry run finishes with no more errors than before the change.
 - [ ] 5. Update the GitHub Actions that still target Node 20 (`actions/checkout`, `actions/setup-python`, `actions/cache`) to their current major versions in every workflow. Done when the test workflow passes on the branch and the deprecation warning is gone from its log.
 - [ ] 6. Correct the board count in the README (it says about 2,900, the list is about 3,300). Done when the number matches the private config at the time of the change.
+- [x] 7. Read job posts from third-party Discord job bots (Nordique from northern.dev) that I add to my own server with their Add App button. Adapter `adapters/discord.py`, one pseudo-company `discord` like `simplify`. Needs the secret `DISCORD_BOT_TOKEN` (Message Content intent on), the variable `DISCORD_JOB_CHANNELS`, and `{slug: discord, ats: discord}` in the private companies.yaml.
 
 ## Stop conditions
 
@@ -91,3 +92,4 @@ When finished, open a pull request summarizing what changed and what is blocked.
 
 ## Progress log
 
+- 2026-11-27: item 7 added at my request and done on branch discord-job-channels. Parser is built from a screenshot of a Nordique post; check it against the first real messages and adjust if the embed shape differs.

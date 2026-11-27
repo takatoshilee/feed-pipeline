@@ -6,7 +6,7 @@ season tag like "(Summer 2027)" removed, and the aggregator form "Company: Role"
 """
 import re
 
-AGGREGATORS = {"simplify", "canadalist"}
+AGGREGATORS = {"simplify", "canadalist", "discord"}
 _SEASON = re.compile(r"\((summer|fall|winter|spring)[^)]*\)", re.I)
 _SUFFIX = ("inc", "corp", "ltd", "llc", "group", "technologies", "canada")
 

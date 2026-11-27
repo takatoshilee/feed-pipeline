@@ -38,7 +38,7 @@ PROBES = {
     "greenhouse": "https://boards-api.greenhouse.io/v1/boards/{s}/jobs?content=true",
     "lever": "https://api.lever.co/v0/postings/{s}?mode=json",
 }
-AGGREGATORS = {"simplify", "canadalist"}
+AGGREGATORS = {"simplify", "canadalist", "discord"}
 
 
 def _domain(website: str) -> str:

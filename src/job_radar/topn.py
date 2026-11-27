@@ -42,7 +42,7 @@ _US = _US_REMOTE + ("united states", ", ca", ", ny", ", wa", ", tx", ", ma", ", 
                     "san francisco", "new york", "seattle", "austin", "boston", "chicago")
 
 # Pseudo-companies whose real company name lives in the Role ("Pebl: SWE Intern").
-_PSEUDO = {"simplify", "canadalist"}
+_PSEUDO = {"simplify", "canadalist", "discord"}
 
 
 def display(row) -> tuple[str, str]:
