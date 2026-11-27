@@ -195,3 +195,21 @@ def test_ensure_headers_appends_missing_columns_after_custom_ones():
     ensure_headers(ws)
     assert ws.rows[0] == custom + ["Lane", "Flags"]
     assert ws.rows[1][0] == "u1"
+
+
+def test_tracker_tab_skips_top30_and_coop_tabs():
+    from job_radar.sheet import tracker_tab
+
+    class T:
+        def __init__(self, title):
+            self.title = title
+
+    class Book:
+        def __init__(self, titles):
+            self._ws = [T(t) for t in titles]
+            self.sheet1 = self._ws[0]
+
+        def worksheets(self):
+            return self._ws
+
+    assert tracker_tab(Book(["Co-op portal", "Top 30", "Co-op notes", "Sheet1"])).title == "Sheet1"

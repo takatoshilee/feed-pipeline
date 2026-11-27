@@ -16,6 +16,7 @@ HEADERS = ["uid", "Company", "Role", "Applied", "Fit", "Resume", "Term", "Why", 
 
 
 TOP_TAB = "Top 30"   # generated ranking tab (write_top); never the tracker
+OTHER_PREFIX = "Co-op"  # tabs kept by Taka's co-op portal tracker (resume repo); the bot never writes there
 
 
 def _col(name: str) -> int:
@@ -39,7 +40,7 @@ def tracker_tab(book):
     """The tracker worksheet: the first tab that is not the generated Top 30 tab. Picking
     `.sheet1` blindly is unsafe because tab order is whatever Taka drags it to."""
     for ws in book.worksheets():
-        if ws.title != TOP_TAB:
+        if ws.title != TOP_TAB and not ws.title.startswith(OTHER_PREFIX):
             return ws
     return book.sheet1
 
